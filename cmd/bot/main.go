@@ -1,26 +1,32 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	app "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application"
-	env "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/environment"
+	botinit "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot_init"
+	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
+	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings"
 )
 
 func main() {
-	r := env.NewReader()
-	a := app.NewApp()
+	logger := logs.NewLogger()
 
-	config, err := r.GetEnv()
+	config, err := settings.LoadConfig()
 	if err != nil {
-		fmt.Println(err)
+		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
 
-	if err := a.Run(config); err != nil {
-		fmt.Println(err)
+	bot, err := botinit.NewTGBot(logger, config)
+	if err != nil {
+		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
 
+	a := app.NewApp(logger, config)
+	if err := a.Run(bot); err != nil {
+		logger.Error("fatal error", "error", err)
+		os.Exit(1)
+	}
 }
