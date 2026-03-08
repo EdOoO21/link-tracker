@@ -3,7 +3,7 @@ package botinit
 import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	inf "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings"
+	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/bot"
 )
 
 type BotInit struct {

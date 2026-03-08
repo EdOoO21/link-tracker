@@ -3,10 +3,11 @@ package main
 import (
 	"os"
 
-	app "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application"
-	botinit "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot_init"
+	app "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot"
+	botinit "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/bot/bot_init"
 	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
-	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/repository"
+	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/bot"
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	a := app.NewApp(logger, config)
+	a := app.NewApp(logger, config, repository.NewRepo())
 	if err := a.Run(bot); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
