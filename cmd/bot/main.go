@@ -26,7 +26,7 @@ func main() {
 	}
 
 	a := app.NewApp(logger, config, repository.NewRepo())
-	if err := a.Run(bot); err != nil {
+	if err = a.Run(bot); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
