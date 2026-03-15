@@ -3,6 +3,7 @@ package settings
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -39,12 +40,13 @@ func LoadConfig() (*Config, error) {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read config file: %w", err)
 	}
 
 	var cmds []tgbotapi.BotCommand
-	if err := json.Unmarshal(data, &cmds); err != nil {
-		return nil, err
+
+	if err = json.Unmarshal(data, &cmds); err != nil {
+		return nil, fmt.Errorf("unmarshal config file: %w", err)
 	}
 
 	return &Config{
