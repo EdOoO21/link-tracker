@@ -1,4 +1,4 @@
-package scrapper
+package main
 
 import (
 	"net/http"
@@ -25,7 +25,11 @@ func main() {
 		Addr:    ":8080",
 		Handler: mux,
 	}
-	defer srv.Close()
+	defer func() {
+		if err := srv.Close(); err != nil {
+			logger.Error("failed to close server", "error", err)
+		}
+	}()
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("server died", "error", err)

@@ -11,7 +11,7 @@ import (
 )
 
 func (h *Handler) PostLinks(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+	defer h.closeBody(r)
 	var req AddLinkRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -26,7 +26,7 @@ func (h *Handler) PostLinks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.ChatID = chatID
-	if err := h.scrapperService.AddLink(ToAddLink(req)); err != nil {
+	if err = h.scrapperService.AddLink(ToAddLink(req)); err != nil {
 		writeServiceError(w, err, "failed to add link")
 		return
 	}
@@ -56,7 +56,7 @@ func (h *Handler) GetLinks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	if err = json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
@@ -64,7 +64,7 @@ func (h *Handler) GetLinks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteLinks(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+	defer h.closeBody(r)
 	var req DeleteLinkRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 
@@ -80,7 +80,7 @@ func (h *Handler) DeleteLinks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.ChatID = chatID
-	if err := h.scrapperService.DeleteLink(ToDeleteLink(req)); err != nil {
+	if err = h.scrapperService.DeleteLink(ToDeleteLink(req)); err != nil {
 		writeServiceError(w, err, "failed to delete link")
 		return
 	}
@@ -97,10 +97,10 @@ func (h *Handler) PostTgChatID(w http.ResponseWriter, r *http.Request) {
 
 	chatID, err := strconv.ParseInt(pathListed[0], 10, 64)
 	if err != nil {
-		http.Error(w, "invalid chat id", http.StatusBadRequest)
+		http.Error(w, "invalid header value: Tg-Chat-Id", http.StatusBadRequest)
 		return
 	}
-	if err := h.scrapperService.AddChat(chatID); err != nil {
+	if err = h.scrapperService.AddChat(chatID); err != nil {
 		writeServiceError(w, err, "failed to add chat")
 		return
 	}
@@ -117,25 +117,32 @@ func (h *Handler) DeleteTgChatID(w http.ResponseWriter, r *http.Request) {
 
 	chatID, err := strconv.ParseInt(pathListed[0], 10, 64)
 	if err != nil {
-		http.Error(w, "invalid chat id", http.StatusBadRequest)
+		http.Error(w, "invalid header value: Tg-Chat-Id", http.StatusBadRequest)
 		return
 	}
-	if err := h.scrapperService.DeleteChat(chatID); err != nil {
+
+	if err = h.scrapperService.DeleteChat(chatID); err != nil {
 		writeServiceError(w, err, "failed to delete chat")
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
+func (h *Handler) closeBody(r *http.Request) {
+	if err := r.Body.Close(); err != nil {
+		h.logger.Error("failed to close request body", "error", err)
+	}
+}
+
 func writeServiceError(w http.ResponseWriter, err error, fallback string) {
 	switch {
-	case errors.Is(err, appscrapper.ChatNotFound):
+	case errors.Is(err, appscrapper.ErrChatNotFound):
 		http.Error(w, err.Error(), http.StatusNotFound)
-	case errors.Is(err, appscrapper.ChatAlreadyExists):
+	case errors.Is(err, appscrapper.ErrChatAlreadyExists):
 		http.Error(w, err.Error(), http.StatusConflict)
-	case errors.Is(err, appscrapper.LinkAlreadyExists):
+	case errors.Is(err, appscrapper.ErrLinkAlreadyExists):
 		http.Error(w, err.Error(), http.StatusConflict)
-	case errors.Is(err, appscrapper.LinkNotFound):
+	case errors.Is(err, appscrapper.ErrLinkNotFound):
 		http.Error(w, err.Error(), http.StatusNotFound)
 	default:
 		http.Error(w, fallback, http.StatusInternalServerError)

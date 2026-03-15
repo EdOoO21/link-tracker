@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	ChatNotFound      = errors.New("chat not found")
-	ChatAlreadyExists = errors.New("chat already exists")
-	LinkAlreadyExists = errors.New("link already exists")
-	LinkNotFound      = errors.New("link not found")
+	ErrChatNotFound      = errors.New("chat not found")
+	ErrChatAlreadyExists = errors.New("chat already exists")
+	ErrLinkAlreadyExists = errors.New("link already exists")
+	ErrLinkNotFound      = errors.New("link not found")
 )
 
 type Scrapper struct {
@@ -33,12 +33,12 @@ func (s *Scrapper) RunCron(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		for range ticker.C {
-			s.checkLinks()
+			s.CheckLinks()
 		}
 	}()
 }
 
-func (s *Scrapper) checkLinks() {
+func (s *Scrapper) CheckLinks() {
 	// for _, links := range s.repo.ListAllLinks() {
 	// 	for _, link := range links {
 
@@ -57,28 +57,28 @@ func (s *Scrapper) checkLinks() {
 
 func (s *Scrapper) AddLink(link models.AddLink) error {
 	if !s.repo.IsPresent(link.ChatID) {
-		return ChatNotFound
+		return ErrChatNotFound
 	}
 	if ok := s.repo.TrackLink(link.ChatID, link.URL, link.Tags); !ok {
-		return LinkAlreadyExists
+		return ErrLinkAlreadyExists
 	}
 	return nil
 }
 
 func (s *Scrapper) DeleteLink(link models.DeleteLink) error {
 	if !s.repo.IsPresent(link.ChatID) {
-		return ChatNotFound
+		return ErrChatNotFound
 	}
 
 	if ok := s.repo.UnTrackLink(link.ChatID, link.URL); !ok {
-		return LinkNotFound
+		return ErrLinkNotFound
 	}
 	return nil
 }
 
 func (s *Scrapper) GetLinks(chatID int64, tags []string) ([]domain.Link, error) {
 	if !s.repo.IsPresent(chatID) {
-		return nil, ChatNotFound
+		return nil, ErrChatNotFound
 	}
 
 	return s.repo.ListLinks(chatID, tags), nil
@@ -86,14 +86,14 @@ func (s *Scrapper) GetLinks(chatID int64, tags []string) ([]domain.Link, error) 
 
 func (s *Scrapper) AddChat(chatID int64) error {
 	if ok := s.repo.AddChat(chatID); !ok {
-		return ChatAlreadyExists
+		return ErrChatAlreadyExists
 	}
 	return nil
 }
 
 func (s *Scrapper) DeleteChat(chatID int64) error {
 	if ok := s.repo.DeleteChat(chatID); !ok {
-		return ChatNotFound
+		return ErrChatNotFound
 	}
 	return nil
 }

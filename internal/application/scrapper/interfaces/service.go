@@ -1,4 +1,4 @@
-package interfaces
+package scrapperinterfaces
 
 import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/models"

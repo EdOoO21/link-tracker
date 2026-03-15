@@ -12,7 +12,6 @@ func NewRepo() UsersLinks {
 	return make(map[int64][]domain.Link)
 }
 
-// returns false if url was in repository otherwise true
 func (u UsersLinks) TrackLink(chatID int64, url string, tags []string) bool {
 	if links, ok := u[chatID]; ok {
 		for _, link := range links {
@@ -35,7 +34,6 @@ func (u UsersLinks) TrackLink(chatID int64, url string, tags []string) bool {
 	return true
 }
 
-// returns true if url was in repository otherwise false
 func (u UsersLinks) UnTrackLink(chatID int64, url string) bool {
 	if _, ok := u[chatID]; ok {
 		for i := range u[chatID] {
@@ -56,7 +54,7 @@ func (u UsersLinks) ListLinks(chatID int64, tags []string) []domain.Link {
 		for _, link := range links {
 			flag := false
 			for _, tag := range tags {
-				if _, ok := link.Tags[tag]; !ok {
+				if _, ok = link.Tags[tag]; !ok {
 					flag = true
 					break
 				}
@@ -77,7 +75,6 @@ func (u UsersLinks) IsPresent(chatID int64) bool {
 	return ok
 }
 
-// returns true if chatID was not present otherwise false
 func (u UsersLinks) AddChat(chatID int64) bool {
 	if _, ok := u[chatID]; !ok {
 		u[chatID] = make([]domain.Link, 0)
@@ -86,7 +83,6 @@ func (u UsersLinks) AddChat(chatID int64) bool {
 	return false
 }
 
-// returns true if chatID was present otherwise false
 func (u UsersLinks) DeleteChat(chatID int64) bool {
 	if _, ok := u[chatID]; ok {
 		delete(u, chatID)

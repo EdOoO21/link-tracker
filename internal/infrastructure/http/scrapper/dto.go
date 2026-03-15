@@ -3,13 +3,13 @@ package scrapper
 import "time"
 
 type AddLinkRequest struct {
-	ChatID int64
+	ChatID int64    `json:"chatID"`
 	URL    string   `json:"url"`
 	Tags   []string `json:"tags"`
 }
 
 type DeleteLinkRequest struct {
-	ChatID int64
+	ChatID int64  `json:"chatID"`
 	URL    string `json:"url"`
 }
 
