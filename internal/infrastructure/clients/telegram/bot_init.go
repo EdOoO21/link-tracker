@@ -2,16 +2,16 @@ package botinit
 
 import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	inf "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure"
+	logger "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
 	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/bot"
 )
 
 type BotInit struct {
 	bot    *tgbotapi.BotAPI
-	logger inf.Logger
+	logger logger.Logger
 }
 
-func NewTGBot(logger inf.Logger, cfg *settings.Config) (*BotInit, error) {
+func NewTGBot(logger logger.Logger, cfg *settings.Config) (*BotInit, error) {
 	logger.Info("bot initialization started")
 	bot, err := tgbotapi.NewBotAPI(cfg.Token)
 	if err != nil {

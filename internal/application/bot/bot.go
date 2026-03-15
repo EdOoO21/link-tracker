@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	loginf "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application"
 	inf "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/interfaces"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	domain "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
 	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/bot"
 )
 
@@ -30,12 +30,12 @@ const (
 )
 
 type App struct {
-	logger loginf.Logger
+	logger logs.Logger
 	config *settings.Config
 	repo   inf.Repository
 }
 
-func NewApp(logger loginf.Logger, config *settings.Config, repo inf.Repository) *App {
+func NewApp(logger logs.Logger, config *settings.Config, repo inf.Repository) *App {
 	return &App{
 		logger: logger,
 		config: config,
@@ -110,7 +110,7 @@ func (a *App) Run(bot inf.TGBot) error {
 				if len(links) == 0 {
 					msg = tgbotapi.NewMessage(chatID, LinksNotExist)
 				} else {
-					msg = tgbotapi.NewMessage(chatID, LinksOutput(links))
+					msg = tgbotapi.NewMessage(chatID, linksOutput(links))
 				}
 			default:
 				msg = tgbotapi.NewMessage(chatID, UnknownCommand)
@@ -129,9 +129,10 @@ func (a *App) Run(bot inf.TGBot) error {
 	return nil
 }
 
-func LinksOutput(links []domain.Link) string {
+func linksOutput(links []domain.Link) string {
 	var text strings.Builder
-
+	text.WriteString("Ссылки:")
+	text.WriteString("\n\n")
 	for i, v := range links {
 		text.WriteString(strconv.Itoa(i + 1))
 		text.WriteString(" ")

@@ -8,5 +8,8 @@ type Repository interface {
 	// returns true if url was in repository otherwise false
 	UnTrackLink(chatID int64, url string) bool
 	ListLinks(chatID int64, tags []string) []domain.Link
-	ListAllLinks() map[int64][]domain.Link
+
+	IsPresent(chatID int64) bool
+	AddChat(chatID int64) bool
+	DeleteChat(chatID int64) bool
 }

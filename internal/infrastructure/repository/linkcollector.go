@@ -1,6 +1,10 @@
 package repository
 
-import "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+import (
+	"time"
+
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+)
 
 type UsersLinks map[int64][]domain.Link
 
@@ -18,8 +22,10 @@ func (u UsersLinks) TrackLink(chatID int64, url string, tags []string) bool {
 		}
 	}
 	obj := domain.Link{
-		URL:  url,
-		Tags: make(map[string]struct{}),
+		ChatID:     chatID,
+		URL:        url,
+		Tags:       make(map[string]struct{}),
+		LastUpdate: time.Now(),
 	}
 	for _, tag := range tags {
 		obj.Tags[tag] = struct{}{}
@@ -45,10 +51,6 @@ func (u UsersLinks) UnTrackLink(chatID int64, url string) bool {
 
 func (u UsersLinks) ListLinks(chatID int64, tags []string) []domain.Link {
 	if links, ok := u[chatID]; ok {
-		if len(links) == 0 {
-			delete(u, chatID)
-			return nil
-		}
 		res := make([]domain.Link, 0)
 
 		for _, link := range links {
@@ -70,6 +72,25 @@ func (u UsersLinks) ListLinks(chatID int64, tags []string) []domain.Link {
 	return nil
 }
 
-func (u UsersLinks) ListAllLinks() map[int64][]domain.Link {
-	return u
+func (u UsersLinks) IsPresent(chatID int64) bool {
+	_, ok := u[chatID]
+	return ok
+}
+
+// returns true if chatID was not present otherwise false
+func (u UsersLinks) AddChat(chatID int64) bool {
+	if _, ok := u[chatID]; !ok {
+		u[chatID] = make([]domain.Link, 0)
+		return true
+	}
+	return false
+}
+
+// returns true if chatID was present otherwise false
+func (u UsersLinks) DeleteChat(chatID int64) bool {
+	if _, ok := u[chatID]; ok {
+		delete(u, chatID)
+		return true
+	}
+	return false
 }

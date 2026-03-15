@@ -1,24 +1,33 @@
 package scrapper
 
 import (
+	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	scrapper "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper"
+	handler "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/http/scrapper"
 	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/repository"
-	scrapperhttp "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/scrapper/http"
+	repo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/repository"
 )
 
 func main() {
 	logger := logs.NewLogger()
-	repo := repository.NewRepo()
+	repo := repo.NewRepo()
 
 	scrapperService := scrapper.NewScrapper(logger, repo)
 	scrapperService.RunCron(1 * time.Minute)
 
-	r := gin.Default()
-	handler := scrapperhttp.NewHandler(logger)
-	handler.RegisterRoutes(r)
-	r.Run(":8080")
+	mux := http.NewServeMux()
+	h := handler.NewHandler(scrapperService, logger)
+	h.RegisterRoutes(mux)
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+	defer srv.Close()
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Error("server died", "error", err)
+	}
 }
