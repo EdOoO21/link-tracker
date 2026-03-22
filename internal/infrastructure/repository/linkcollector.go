@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
+	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
 )
 
 type UsersLinks map[int64][]domain.Link
@@ -88,4 +89,24 @@ func (u UsersLinks) DeleteChat(chatID int64) bool {
 		return true
 	}
 	return false
+}
+
+func (u UsersLinks) ListAllLinks() map[int64][]domain.Link {
+	res := make(map[int64][]domain.Link, len(u))
+	for chatID, links := range u {
+		copied := make([]domain.Link, len(links))
+		copy(copied, links)
+		res[chatID] = copied
+	}
+	return res
+}
+
+func (u UsersLinks) UpdateLinksLastUpdate(chatID int64, url string, lastUpdate time.Time) error {
+	for i := range u[chatID] {
+		if u[chatID][i].URL == url {
+			u[chatID][i].LastUpdate = lastUpdate
+			return nil
+		}
+	}
+	return ports.ErrLinkNotFound
 }

@@ -3,21 +3,37 @@ package scrapper
 import (
 	"time"
 
-	repo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/interfaces"
+	scrapperinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/interfaces"
 	models "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/models"
 	domain "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	ports "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
 )
 
-type Scrapper struct {
-	repo   repo.Repository
-	logger ports.Logger
+type Sources struct {
+	Github        scrapperinterfaces.GithubUpdates
+	StackOverflow scrapperinterfaces.StackOverflowUpdates
 }
 
-func NewScrapper(logger ports.Logger, repo repo.Repository) *Scrapper {
+type Scrapper struct {
+	repo      scrapperinterfaces.Repository
+	logger    ports.Logger
+	sources   Sources
+	botClient scrapperinterfaces.BotClient
+}
+
+func NewScrapper(logger ports.Logger,
+	repo scrapperinterfaces.Repository,
+	botClient scrapperinterfaces.BotClient,
+	github scrapperinterfaces.GithubUpdates,
+	stackOverflow scrapperinterfaces.StackOverflowUpdates) *Scrapper {
 	return &Scrapper{
-		repo:   repo,
-		logger: logger,
+		repo:      repo,
+		logger:    logger,
+		botClient: botClient,
+		sources: Sources{
+			Github:        github,
+			StackOverflow: stackOverflow,
+		},
 	}
 }
 
@@ -31,7 +47,51 @@ func (s *Scrapper) RunCron(interval time.Duration) {
 }
 
 func (s *Scrapper) CheckLinks() {
-	panic("not implemented")
+	for chatID, links := range s.repo.ListAllLinks() {
+		for _, link := range links {
+			update, description, err := s.getResourceUpdate(link.URL)
+			if err != nil {
+				s.logger.Warn("failed to get resource update", "chatID", chatID, "url", link.URL, "error", err)
+				continue
+			}
+
+			if !update.LastUpdate.After(link.LastUpdate) {
+				continue
+			}
+
+			if err = s.botClient.SendUpdates([]int64{chatID}, link.URL, description); err != nil {
+				s.logger.Error("failed to send update notification", "chatID", chatID, "url", link.URL, "error", err)
+				continue
+			}
+
+			if err = s.repo.UpdateLinksLastUpdate(chatID, link.URL, update.LastUpdate); err != nil {
+				s.logger.Error("failed to update last update time", "chatID", chatID, "url", link.URL, "error", err)
+				continue
+			}
+
+			s.logger.Info("link update processed", "chatID", chatID, "url", link.URL, "lastUpdate", update.LastUpdate)
+		}
+	}
+}
+
+func (s *Scrapper) getResourceUpdate(rawURL string) (ports.ResourceUpdate, string, error) {
+	if owner, repo, err := s.sources.Github.ParseGitHubURL(rawURL); err == nil {
+		update, err := s.sources.Github.GetRepoUpdate(owner, repo)
+		if err != nil {
+			return ports.ResourceUpdate{}, "", err
+		}
+		return update, "Обнаружено обновление GitHub репозитория.", nil
+	}
+
+	if questionID, err := s.sources.StackOverflow.ParseStackOverflowURL(rawURL); err == nil {
+		update, err := s.sources.StackOverflow.GetQuestionUpdate(questionID)
+		if err != nil {
+			return ports.ResourceUpdate{}, "", err
+		}
+		return update, "Обнаружено обновление вопроса StackOverflow.", nil
+	}
+
+	return ports.ResourceUpdate{}, "", ports.ErrLinkNotFound
 }
 
 func (s *Scrapper) AddLink(link models.AddLink) error {
