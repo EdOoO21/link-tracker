@@ -1,13 +1,14 @@
 package bot
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	inf "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/interfaces"
 	domain "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
-	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
+	ports "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
 	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/bot"
 )
 
@@ -18,24 +19,29 @@ const (
 		"/track - начать отслеживание ссылки (опционально с тегами)\n" +
 		"/untrack - прекратить отслеживание ссылки\n" +
 		"/list - вывести список всех отслеживаемых ссылок (опционально фильтр по тегу)"
-	StartCommand         = "Добро пожаловать! Используйте /help, чтобы посмотреть доступные команды."
-	UnknownCommand       = "Неизвестная команда. Воспользуйтесь /help, чтобы посмотреть список доступных команд."
-	TrackNoURL           = "Для того, чтобы начать отслеживание ссылки, пожалуйста, передайте ссылку в качестве параметра (/track google.com)."
-	TrackExistedURL      = "Ссылка уже отслеживается."
-	TrackNotExistedURL   = "Ссылка успешно добавлена к отслеживанию."
-	UntrackNotOneURL     = "Для того, чтобы перестать отслеживать ссылку, пожалуйста, передайте только ссылку в качестве параметра (/untrack google.com)."
-	UntrackExistedURL    = "Ссылка успешно удалена."
-	UntrackNotExistedURL = "Ссылка отстуствует среди подписок."
-	LinksNotExist        = "Отслеживаемых ссылок не найдено."
+	StartCommand              = "Добро пожаловать! Используйте /help, чтобы посмотреть доступные команды. Вы можете отслеживать источники."
+	StartCommandFailedChatAdd = "Добро пожаловать! Используйте /help, чтобы посмотреть доступные команды.\nК сожалению, не удалось предоставить вам возомжность отслеживания источников, попробуйте позже снова с помощью /start."
+	UnknownCommand            = "Неизвестная команда. Воспользуйтесь /help, чтобы посмотреть список доступных команд."
+	TrackNoURL                = "Для того, чтобы начать отслеживание ссылки, пожалуйста, передайте ссылку в качестве параметра (/track google.com)."
+	TrackExistedURL           = "Ссылка уже отслеживается."
+	TrackNotExistedURL        = "Ссылка успешно добавлена к отслеживанию."
+	TrackErrorToAddLink       = "Произошла непредвиденная при добавлении ссыкли к отслеживанию.\nПопробуйте снова через некоторое время."
+	UntrackNotOneURL          = "Для того, чтобы перестать отслеживать ссылку, пожалуйста, передайте только ссылку в качестве параметра (/untrack google.com)."
+	UntrackExistedURL         = "Ссылка успешно удалена."
+	UntrackNotExistedURL      = "Ссылка отстуствует среди подписок."
+	UntrackErrToDeleteLink    = "Произошла непредвиденная при удалении ссыкли из отслеживания.\nПопробуйте снова через некоторое время."
+	LinksNotExist             = "Отслеживаемых ссылок не найдено."
+	LinksListFailed           = "Произошла непредвиденная при поиске всех отслеживаемых ссылок.\nПопробуйте снова через некоторое время."
+	ChatIDNotFound            = "Вам не предоставлена возможность отслеживать источники.\n Попробуйте /start."
 )
 
 type App struct {
-	logger logs.Logger
+	logger ports.Logger
 	config *settings.Config
 	repo   inf.Repository
 }
 
-func NewApp(logger logs.Logger, config *settings.Config, repo inf.Repository) *App {
+func NewApp(logger ports.Logger, config *settings.Config, repo inf.Repository) *App {
 	return &App{
 		logger: logger,
 		config: config,
@@ -79,7 +85,12 @@ func (a *App) ModerateCommand(command string, update tgbotapi.Update) (tgbotapi.
 	case "help":
 		msg = tgbotapi.NewMessage(chatID, HelpCommand)
 	case "start":
-		msg = tgbotapi.NewMessage(chatID, StartCommand)
+		err := a.repo.AddChat(chatID)
+		if err != nil && !errors.Is(err, ports.ErrChatAlreadyExists) {
+			msg = tgbotapi.NewMessage(chatID, StartCommandFailedChatAdd)
+		} else {
+			msg = tgbotapi.NewMessage(chatID, StartCommand)
+		}
 	case "track":
 		msg = a.computeTrack(update)
 	case "untrack":
@@ -109,8 +120,12 @@ func (a *App) computeTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 		tags = args[1:]
 	}
 	if url != "" {
-		if ok := a.repo.TrackLink(chatID, url, tags); !ok {
+		if err := a.repo.TrackLink(chatID, url, tags); errors.Is(err, ports.ErrLinkAlreadyExists) {
 			msg = tgbotapi.NewMessage(chatID, TrackExistedURL)
+		} else if errors.Is(err, ports.ErrChatNotFound) {
+			msg = tgbotapi.NewMessage(chatID, ChatIDNotFound)
+		} else if err != nil {
+			msg = tgbotapi.NewMessage(chatID, TrackErrorToAddLink)
 		} else {
 			msg = tgbotapi.NewMessage(chatID, TrackNotExistedURL)
 		}
@@ -130,10 +145,14 @@ func (a *App) computeUnTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 	}
 
 	if url != "" {
-		if ok := a.repo.UnTrackLink(chatID, url); ok {
-			msg = tgbotapi.NewMessage(chatID, UntrackExistedURL)
-		} else {
+		if err := a.repo.UnTrackLink(chatID, url); errors.Is(err, ports.ErrLinkNotFound) {
 			msg = tgbotapi.NewMessage(chatID, UntrackNotExistedURL)
+		} else if errors.Is(err, ports.ErrChatNotFound) {
+			msg = tgbotapi.NewMessage(chatID, ChatIDNotFound)
+		} else if err != nil {
+			msg = tgbotapi.NewMessage(chatID, UntrackErrToDeleteLink)
+		} else {
+			msg = tgbotapi.NewMessage(chatID, UntrackExistedURL)
 		}
 	}
 	return msg
@@ -143,13 +162,19 @@ func (a *App) computeList(update tgbotapi.Update) tgbotapi.MessageConfig {
 	tags := strings.Fields(update.Message.CommandArguments())
 	var msg tgbotapi.MessageConfig
 	chatID := update.Message.Chat.ID
-	links := a.repo.ListLinks(chatID, tags)
-
-	if len(links) == 0 {
-		msg = tgbotapi.NewMessage(chatID, LinksNotExist)
+	links, err := a.repo.ListLinks(chatID, tags)
+	if errors.Is(err, ports.ErrChatNotFound) {
+		msg = tgbotapi.NewMessage(chatID, ChatIDNotFound)
+	} else if err != nil {
+		msg = tgbotapi.NewMessage(chatID, LinksListFailed)
 	} else {
-		msg = tgbotapi.NewMessage(chatID, linksOutput(links))
+		if len(links) == 0 {
+			msg = tgbotapi.NewMessage(chatID, LinksNotExist)
+		} else {
+			msg = tgbotapi.NewMessage(chatID, linksOutput(links))
+		}
 	}
+
 	return msg
 }
 

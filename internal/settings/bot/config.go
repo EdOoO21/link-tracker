@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	ErrTokenEmpty = errors.New("token is empty")
-	ErrPathEmpty  = errors.New("commands path is empty")
+	ErrTokenEmpty       = errors.New("token is empty")
+	ErrPathEmpty        = errors.New("commands path is empty")
+	ErrScrapperURLEmpty = errors.New("scrapper URL is empty")
 )
 
 const (
@@ -20,15 +21,17 @@ const (
 )
 
 type Config struct {
-	Token    string
-	Commands []tgbotapi.BotCommand
-	Timeout  int
-	Offset   int
+	Token       string
+	Commands    []tgbotapi.BotCommand
+	Timeout     int
+	Offset      int
+	ScrapperURL string
 }
 
 func LoadConfig() (*Config, error) {
 	token := os.Getenv("APP_TELEGRAM_TOKEN")
 	path := os.Getenv("APP_TELEGRAM_COMMANDS_PATH")
+	scrapperURL := os.Getenv("APP_SCRAPPER_BASE_URL")
 
 	if token == "" {
 		return nil, ErrTokenEmpty
@@ -36,6 +39,10 @@ func LoadConfig() (*Config, error) {
 
 	if path == "" {
 		return nil, ErrPathEmpty
+	}
+
+	if scrapperURL == "" {
+		return nil, ErrScrapperURLEmpty
 	}
 
 	data, err := os.ReadFile(path)
@@ -49,9 +56,10 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		Token:    token,
-		Commands: cmds,
-		Timeout:  LongPollingTimeout,
-		Offset:   MeassageOffset,
+		Token:       token,
+		Commands:    cmds,
+		Timeout:     LongPollingTimeout,
+		Offset:      MeassageOffset,
+		ScrapperURL: scrapperURL,
 	}, nil
 }

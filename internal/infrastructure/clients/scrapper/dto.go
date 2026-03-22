@@ -2,12 +2,12 @@ package scrapper
 
 import "time"
 
-type AddLinkRequest struct {
+type TrackLinkRequest struct {
 	URL  string   `json:"url"`
 	Tags []string `json:"tags"`
 }
 
-type DeleteLinkRequest struct {
+type UnTrackLinkRequest struct {
 	URL string `json:"url"`
 }
 

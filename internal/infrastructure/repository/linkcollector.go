@@ -21,7 +21,6 @@ func (u UsersLinks) TrackLink(chatID int64, url string, tags []string) bool {
 		}
 	}
 	obj := domain.Link{
-		ChatID:     chatID,
 		URL:        url,
 		Tags:       make(map[string]struct{}),
 		LastUpdate: time.Now(),
