@@ -4,15 +4,15 @@ import (
 	"net/http"
 
 	service "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/interfaces"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
+	logger "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
 )
 
 type Handler struct {
 	service service.BotService
-	logger  *logger.Logger
+	logger  logger.Logger
 }
 
-func NewHandler(logger *logger.Logger, service service.BotService) *Handler {
+func NewHandler(logger logger.Logger, service service.BotService) *Handler {
 	return &Handler{
 		service: service,
 		logger:  logger,

@@ -126,7 +126,7 @@ func (a *App) Run() error {
 func (a *App) computeText(chatID int64, text string) (tgbotapi.MessageConfig, string) {
 	var msg tgbotapi.MessageConfig
 	command := NotCommand
-	switch a.stMachine[chatID].State {
+	switch a.state(chatID).State {
 	case TrackCommandGot:
 		msg, command = a.computeGotLink(chatID, text)
 	case LinkGot:
@@ -145,8 +145,8 @@ func (a *App) computeGotLink(chatID int64, text string) (tgbotapi.MessageConfig,
 	if u.Host != "github.com" && u.Host != "stackoverflow.com" {
 		return tgbotapi.NewMessage(chatID, NotSupportedURL), TextNotSupportedLinkGot
 	}
-	a.stMachine[chatID].URL = u.String()
-	a.stMachine[chatID].State = LinkGot
+	a.state(chatID).URL = u.String()
+	a.state(chatID).State = LinkGot
 
 	return tgbotapi.NewMessage(chatID, ValidURL), TextValidLinkGot
 }
@@ -162,7 +162,7 @@ func (a *App) computeGotTags(chatID int64, text string) (tgbotapi.MessageConfig,
 			tags = append(tags, tag)
 		}
 	}
-	if err := a.repo.TrackLink(chatID, a.stMachine[chatID].URL, tags); errors.Is(err, ports.ErrLinkAlreadyExists) {
+	if err := a.repo.TrackLink(chatID, a.state(chatID).URL, tags); errors.Is(err, ports.ErrLinkAlreadyExists) {
 		msg = tgbotapi.NewMessage(chatID, TrackExistedURL)
 		command = URLExists
 	} else if errors.Is(err, ports.ErrChatNotFound) {
@@ -204,7 +204,7 @@ func (a *App) moderateCommand(command string, update tgbotapi.Update) (tgbotapi.
 }
 
 func (a *App) computeHelp(chatID int64) tgbotapi.MessageConfig {
-	if a.stMachine[chatID].State != NothingGot {
+	if a.hasActiveState(chatID) {
 		delete(a.stMachine, chatID)
 	}
 	return tgbotapi.NewMessage(chatID, HelpCommand)
@@ -212,7 +212,7 @@ func (a *App) computeHelp(chatID int64) tgbotapi.MessageConfig {
 
 func (a *App) computeStart(chatID int64) tgbotapi.MessageConfig {
 	var msg tgbotapi.MessageConfig
-	if a.stMachine[chatID].State != NothingGot {
+	if a.hasActiveState(chatID) {
 		delete(a.stMachine, chatID)
 	}
 	err := a.repo.AddChat(chatID)
@@ -228,7 +228,7 @@ func (a *App) computeTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 	var msg tgbotapi.MessageConfig
 	chatID := update.Message.Chat.ID
 
-	if a.stMachine[chatID].State == NothingGot {
+	if a.state(chatID).State == NothingGot {
 		msg = tgbotapi.NewMessage(chatID, AddingToTrackSeqStarted)
 	} else {
 		msg = tgbotapi.NewMessage(chatID, AddingToTrackSeqRestarted)
@@ -247,7 +247,7 @@ func (a *App) computeUnTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 	var msg tgbotapi.MessageConfig
 	var url string
 	chatID := update.Message.Chat.ID
-	if a.stMachine[chatID].State != NothingGot {
+	if a.hasActiveState(chatID) {
 		delete(a.stMachine, chatID)
 	}
 	if len(args) == 1 {
@@ -274,7 +274,7 @@ func (a *App) computeList(update tgbotapi.Update) tgbotapi.MessageConfig {
 	tags := strings.Fields(update.Message.CommandArguments())
 	var msg tgbotapi.MessageConfig
 	chatID := update.Message.Chat.ID
-	if a.stMachine[chatID].State != NothingGot {
+	if a.hasActiveState(chatID) {
 		delete(a.stMachine, chatID)
 	}
 	links, err := a.repo.ListLinks(chatID, tags)
@@ -299,7 +299,7 @@ func (a *App) computeCancel(chatID int64) tgbotapi.MessageConfig {
 }
 
 func (a *App) computeUnknownCommand(chatID int64, command string) (tgbotapi.MessageConfig, string) {
-	if a.stMachine[chatID].State != NothingGot {
+	if a.hasActiveState(chatID) {
 		delete(a.stMachine, chatID)
 	}
 	msg := tgbotapi.NewMessage(chatID, UnknownCommand)
@@ -308,6 +308,20 @@ func (a *App) computeUnknownCommand(chatID int64, command string) (tgbotapi.Mess
 		command = Unknown
 	}
 	return msg, command
+}
+
+func (a *App) hasActiveState(chatID int64) bool {
+	stateInfo, ok := a.stMachine[chatID]
+	return ok && stateInfo != nil && stateInfo.State != NothingGot
+}
+
+func (a *App) state(chatID int64) *StateInfo {
+	stateInfo, ok := a.stMachine[chatID]
+	if !ok || stateInfo == nil {
+		stateInfo = &StateInfo{State: NothingGot}
+		a.stMachine[chatID] = stateInfo
+	}
+	return stateInfo
 }
 
 func linkUpdated(link, description string) string {

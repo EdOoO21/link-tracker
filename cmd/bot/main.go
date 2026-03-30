@@ -1,15 +1,20 @@
 package main
 
 import (
-	"net/http"
+	"fmt"
+	"net"
 	"os"
 
 	app "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot"
-	scrapperClient "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/scrapper"
+	botinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/interfaces"
+	scrappergrpc "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/scrapper_grpc"
 	botinit "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/telegram"
-	handlerBot "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/http/bot"
+	grpcbot "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
 	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/bot"
+	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/proto/gen"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -27,23 +32,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	botService := app.NewApp(logger, config, scrapperClient.NewClient(logger, config.ScrapperURL), bot)
-	mux := http.NewServeMux()
-	h := handlerBot.NewHandler(logger, botService)
-	h.RegisterRoutes(mux)
-
-	srv := &http.Server{
-		Addr:    ":8090",
-		Handler: mux,
+	scrapperClient, scrapperConn, err := newScrapperGRPCClient(logger, config.ScrapperURL.HostPort())
+	if err != nil {
+		logger.Error("failed to create scrapper grpc client", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
-		if err := srv.Close(); err != nil {
-			logger.Error("failed to close server", "error", err)
+		if err := scrapperConn.Close(); err != nil {
+			logger.Error("failed to close scrapper grpc connection", "error", err)
 		}
 	}()
+
+	botService := app.NewApp(logger, config, scrapperClient, bot)
+
+	grpcListener, err := net.Listen("tcp", fmt.Sprintf(":%d", config.GRPCPort))
+	if err != nil {
+		logger.Error("failed to listen grpc", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := grpcListener.Close(); err != nil {
+			logger.Error("failed to close grpc listener", "error", err)
+		}
+	}()
+
+	grpcSrv := grpc.NewServer()
+	defer grpcSrv.GracefulStop()
+
+	botGRPCServer := grpcbot.NewBotServiceServer(logger, botService)
+	pb.RegisterBotServiceServer(grpcSrv, botGRPCServer)
+
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("server died", "error", err)
+		if err := grpcSrv.Serve(grpcListener); err != nil {
+			logger.Error("grpc server died", "error", err)
 		}
 	}()
 
@@ -51,4 +72,17 @@ func main() {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
+}
+
+func newScrapperGRPCClient(logger *logs.Logger, addr string) (botinterfaces.Repository, *grpc.ClientConn, error) {
+	conn, err := grpc.NewClient(
+		addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	client := scrappergrpc.NewGRPCScrapperClient(logger, conn)
+	return client, conn, nil
 }
