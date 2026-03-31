@@ -32,10 +32,7 @@ func run(logger *logs.Logger) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	bot, err := botinit.NewTGBot(logger, config)
-	if err != nil {
-		return fmt.Errorf("init telegram bot: %w", err)
-	}
+	bot := botinit.NewDummyBot(logger)
 
 	scrapperClient, scrapperConn, err := newScrapperGRPCClient(logger, config.ScrapperURL.HostPort())
 	if err != nil {

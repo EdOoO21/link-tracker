@@ -12,23 +12,23 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type BotServiceServer struct {
+type ServiceServer struct {
 	pb.UnimplementedBotServiceServer
 	botService botinterfaces.BotService
 	logger     ports.Logger
 }
 
-func NewBotServiceServer(logger ports.Logger, botService botinterfaces.BotService) *BotServiceServer {
-	return &BotServiceServer{
+func NewBotServiceServer(logger ports.Logger, botService botinterfaces.BotService) *ServiceServer {
+	return &ServiceServer{
 		logger:     logger,
 		botService: botService,
 	}
 }
 
-func (b *BotServiceServer) SendUpdates(ctx context.Context, req *pb.SendUpdatesRequest) (*empty.Empty, error) {
+func (b *ServiceServer) SendUpdates(_ context.Context, req *pb.SendUpdatesRequest) (*empty.Empty, error) {
 	updates := serviceModels.SendUpdates{
 		URL:         req.GetUrl(),
-		ChatIDS:     req.GetTgChatIds(),
+		ChatIDs:     req.GetTgChatIds(),
 		Description: req.GetDescription(),
 	}
 
@@ -40,6 +40,7 @@ func (b *BotServiceServer) SendUpdates(ctx context.Context, req *pb.SendUpdatesR
 	return &empty.Empty{}, nil
 }
 
+//nolint:wrapcheck // gRPC handlers must return raw status errors to preserve status codes.
 func toStatusError(err error) error {
 	return status.Error(codes.Internal, err.Error())
 }

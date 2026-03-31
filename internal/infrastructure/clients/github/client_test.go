@@ -38,7 +38,7 @@ func TestGetRepoUpdate(t *testing.T) {
 }
 
 func TestGetRepoUpdateErrors(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
@@ -62,10 +62,10 @@ func TestParseGitHubURL(t *testing.T) {
 		t.Fatalf("got owner=%q repo=%q", owner, repo)
 	}
 
-	if _, _, err := client.ParseGitHubURL("https://google.com/user/repo"); err == nil {
+	if _, _, parseErr := client.ParseGitHubURL("https://google.com/user/repo"); parseErr == nil {
 		t.Fatal("expected error for non-github url")
 	}
-	if _, _, err := client.ParseGitHubURL("https://github.com/user"); err == nil {
+	if _, _, parseErr := client.ParseGitHubURL("https://github.com/user"); parseErr == nil {
 		t.Fatal("expected error for invalid repo url")
 	}
 }

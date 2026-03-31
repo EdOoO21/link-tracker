@@ -94,6 +94,18 @@ func (u *UsersLinks) IsPresent(chatID int64) bool {
 	return ok
 }
 
+func (u *UsersLinks) IsLinkPresent(chatID int64, url string) bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+
+	for _, link := range u.links[chatID] {
+		if link.URL == url {
+			return true
+		}
+	}
+	return false
+}
+
 func (u *UsersLinks) AddChat(chatID int64) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()

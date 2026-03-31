@@ -68,7 +68,7 @@ func (h *Handler) GetLinks(w http.ResponseWriter, r *http.Request, chatID int64)
 
 }
 
-func (h *Handler) PostTgChatID(w http.ResponseWriter, r *http.Request, chatID int64) {
+func (h *Handler) PostTgChatID(w http.ResponseWriter, _ *http.Request, chatID int64) {
 	if err := h.scrapperService.AddChat(chatID); err != nil {
 		writeServiceError(w, err, "failed to add chat")
 		return
@@ -76,7 +76,7 @@ func (h *Handler) PostTgChatID(w http.ResponseWriter, r *http.Request, chatID in
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *Handler) DeleteTgChatID(w http.ResponseWriter, r *http.Request, chatID int64) {
+func (h *Handler) DeleteTgChatID(w http.ResponseWriter, _ *http.Request, chatID int64) {
 	if err := h.scrapperService.DeleteChat(chatID); err != nil {
 		writeServiceError(w, err, "failed to delete chat")
 		return

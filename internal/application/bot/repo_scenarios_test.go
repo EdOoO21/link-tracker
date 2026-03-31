@@ -31,6 +31,7 @@ type mockRepo struct {
 	listErr    error
 	addChatErr error
 	listResp   []domain.Link
+	linkExists bool
 }
 
 func (m *mockRepo) TrackLink(chatID int64, url string, tags []string) error {
@@ -57,7 +58,11 @@ func (m *mockRepo) AddChat(chatID int64) error {
 	return m.addChatErr
 }
 
-func (m *mockRepo) DeleteChat(chatID int64) error { return nil }
+func (m *mockRepo) DeleteChat(_ int64) error { return nil }
+
+func (m *mockRepo) IsLinkPresent(_ int64, _ string) bool {
+	return m.linkExists
+}
 
 func commandUpdate(chatID int64, command, args string) tgbotapi.Update {
 	text := command
@@ -118,7 +123,7 @@ func TestComputeList(t *testing.T) {
 		{name: "chat not found", listErr: ports.ErrChatNotFound, wantText: ChatIDNotFound},
 		{name: "unexpected error", listErr: errors.New("boom"), wantText: LinksListFailed},
 		{name: "empty list", wantText: LinksNotExist},
-		{name: "filtered list", args: "go backend", listResp: []domain.Link{{URL: "https://github.com/user/repo"}}, wantText: "Ссылки:\n\n1 https://github.com/user/repo\n", wantTags: []string{"go", "backend"}},
+		{name: "filtered list", args: "go backend", listResp: []domain.Link{{URL: "https://github.com/user/repo"}}, wantText: "Ссылки:\n\n1. https://github.com/user/repo\n", wantTags: []string{"go", "backend"}},
 	}
 
 	for _, tt := range tests {
@@ -184,7 +189,7 @@ func TestComputeGotTags(t *testing.T) {
 		wantCmd  string
 		wantTags []string
 	}{
-		{name: "already exists", trackErr: ports.ErrLinkAlreadyExists, wantText: TrackExistedURL, wantCmd: URLExists, wantTags: []string{"go", "backend"}},
+		{name: "already exists", trackErr: ports.ErrLinkAlreadyExists, wantText: TrackExistedURLWithReset, wantCmd: URLExists, wantTags: []string{"go", "backend"}},
 		{name: "chat not found", trackErr: ports.ErrChatNotFound, wantText: ChatIDNotFound, wantCmd: ChatIDNotFound, wantTags: []string{"go", "backend"}},
 		{name: "unexpected error", trackErr: errors.New("boom"), wantText: TrackErrorToAddLink, wantCmd: UnexpectedErrorToAddLink, wantTags: []string{"go", "backend"}},
 		{name: "success", wantText: TrackNotExistedURL, wantCmd: URLAdded, wantTags: []string{"go", "backend"}},
@@ -210,5 +215,23 @@ func TestComputeGotTags(t *testing.T) {
 		if _, ok := app.stMachine[chatID]; ok {
 			t.Fatal("expected state to be cleared after got tags")
 		}
+	}
+}
+
+func TestComputeGotTagsWithoutTags(t *testing.T) {
+	chatID := int64(22)
+	repo := &mockRepo{}
+	app := &App{repo: repo, stMachine: StateMachine{chatID: {State: LinkGot, URL: "https://github.com/user/repo"}}}
+
+	msg, command := app.computeGotTags(chatID, "-")
+
+	if msg.Text != TrackNotExistedURL {
+		t.Fatalf("got text %q, want %q", msg.Text, TrackNotExistedURL)
+	}
+	if command != URLAdded {
+		t.Fatalf("got command %q, want %q", command, URLAdded)
+	}
+	if len(repo.trackLinkArgs.tags) != 0 {
+		t.Fatalf("got tags %v, want empty slice", repo.trackLinkArgs.tags)
 	}
 }

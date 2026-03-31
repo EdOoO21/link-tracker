@@ -41,7 +41,7 @@ func TestBotServiceServerSendUpdates(t *testing.T) {
 			wantCode:   codes.OK,
 			wantUpdates: serviceModels.SendUpdates{
 				URL:         "https://github.com/user/repo",
-				ChatIDS:     []int64{1, 2},
+				ChatIDs:     []int64{1, 2},
 				Description: "updated",
 			},
 		},
@@ -51,7 +51,7 @@ func TestBotServiceServerSendUpdates(t *testing.T) {
 			wantCode:   codes.Internal,
 			wantUpdates: serviceModels.SendUpdates{
 				URL:         "https://github.com/user/repo",
-				ChatIDS:     []int64{1, 2},
+				ChatIDs:     []int64{1, 2},
 				Description: "updated",
 			},
 		},
@@ -62,7 +62,7 @@ func TestBotServiceServerSendUpdates(t *testing.T) {
 		server := NewBotServiceServer(noopLogger{}, service)
 		req := &pb.SendUpdatesRequest{
 			Url:         tt.wantUpdates.URL,
-			TgChatIds:   tt.wantUpdates.ChatIDS,
+			TgChatIds:   tt.wantUpdates.ChatIDs,
 			Description: tt.wantUpdates.Description,
 		}
 

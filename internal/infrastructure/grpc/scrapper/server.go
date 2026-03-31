@@ -16,34 +16,34 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type ScrapperServiceServer struct {
+type ServiceServer struct {
 	pb.UnimplementedScrapperServiceServer
 	scrapperService scrapperinterfaces.ScrapperService
 	logger          ports.Logger
 }
 
-func NewScrapperServiceServer(logger ports.Logger, scrapperService scrapperinterfaces.ScrapperService) *ScrapperServiceServer {
-	return &ScrapperServiceServer{
+func NewScrapperServiceServer(logger ports.Logger, scrapperService scrapperinterfaces.ScrapperService) *ServiceServer {
+	return &ServiceServer{
 		logger:          logger,
 		scrapperService: scrapperService,
 	}
 }
 
-func (s *ScrapperServiceServer) AddChat(ctx context.Context, req *pb.ChatRequest) (*empty.Empty, error) {
+func (s *ServiceServer) AddChat(_ context.Context, req *pb.ChatRequest) (*empty.Empty, error) {
 	if err := s.scrapperService.AddChat(req.GetChatId()); err != nil {
 		return nil, toStatusError(err)
 	}
 	return &empty.Empty{}, nil
 }
 
-func (s *ScrapperServiceServer) DeleteChat(ctx context.Context, req *pb.ChatRequest) (*empty.Empty, error) {
+func (s *ServiceServer) DeleteChat(_ context.Context, req *pb.ChatRequest) (*empty.Empty, error) {
 	if err := s.scrapperService.DeleteChat(req.GetChatId()); err != nil {
 		return nil, toStatusError(err)
 	}
 	return &empty.Empty{}, nil
 }
 
-func (s *ScrapperServiceServer) AddLink(ctx context.Context, req *pb.AddLinkRequest) (*empty.Empty, error) {
+func (s *ServiceServer) AddLink(_ context.Context, req *pb.AddLinkRequest) (*empty.Empty, error) {
 	link := models.AddLink{
 		ChatID: req.GetChatId(),
 		URL:    req.GetUrl(),
@@ -55,7 +55,7 @@ func (s *ScrapperServiceServer) AddLink(ctx context.Context, req *pb.AddLinkRequ
 	return &empty.Empty{}, nil
 }
 
-func (s *ScrapperServiceServer) DeleteLink(ctx context.Context, req *pb.DeleteLinkRequest) (*empty.Empty, error) {
+func (s *ServiceServer) DeleteLink(_ context.Context, req *pb.DeleteLinkRequest) (*empty.Empty, error) {
 	link := models.DeleteLink{
 		ChatID: req.GetChatId(),
 		URL:    req.GetUrl(),
@@ -66,7 +66,7 @@ func (s *ScrapperServiceServer) DeleteLink(ctx context.Context, req *pb.DeleteLi
 	return &empty.Empty{}, nil
 }
 
-func (s *ScrapperServiceServer) ListLinks(ctx context.Context, req *pb.ListLinksRequest) (*pb.ListLinksResponse, error) {
+func (s *ServiceServer) ListLinks(_ context.Context, req *pb.ListLinksRequest) (*pb.ListLinksResponse, error) {
 	links, err := s.scrapperService.GetLinks(req.GetChatId(), req.GetTags())
 	if err != nil {
 		return nil, toStatusError(err)
@@ -83,6 +83,7 @@ func (s *ScrapperServiceServer) ListLinks(ctx context.Context, req *pb.ListLinks
 	return resp, nil
 }
 
+//nolint:wrapcheck // gRPC handlers must return raw status errors to preserve status codes.
 func toStatusError(err error) error {
 	switch {
 	case errors.Is(err, ports.ErrChatNotFound):

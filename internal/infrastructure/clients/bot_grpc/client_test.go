@@ -22,7 +22,7 @@ type mockBotServiceClient struct {
 	err        error
 }
 
-func (m *mockBotServiceClient) SendUpdates(ctx context.Context, in *pc.SendUpdatesRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (m *mockBotServiceClient) SendUpdates(_ context.Context, in *pc.SendUpdatesRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	m.gotRequest = in
 	if m.resp == nil {
 		m.resp = &empty.Empty{}

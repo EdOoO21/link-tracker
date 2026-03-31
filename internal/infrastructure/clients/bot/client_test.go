@@ -59,5 +59,8 @@ func TestSendUpdates(t *testing.T) {
 		if gotBody.URL != "https://github.com/user/repo" || gotBody.Description != "updated" {
 			t.Fatalf("case %q: got body %+v", tt.name, gotBody)
 		}
+		if len(gotBody.ChatIDs) != 2 || gotBody.ChatIDs[0] != 1 || gotBody.ChatIDs[1] != 2 {
+			t.Fatalf("case %q: got chat ids %v", tt.name, gotBody.ChatIDs)
+		}
 	}
 }

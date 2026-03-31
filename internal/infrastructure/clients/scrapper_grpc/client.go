@@ -95,21 +95,36 @@ func (c *Client) ListLinks(chatID int64, tags []string) ([]domain.Link, error) {
 	return links, nil
 }
 
+func (c *Client) IsLinkPresent(chatID int64, link string) bool {
+	links, err := c.ListLinks(chatID, nil)
+	if err != nil {
+		c.logger.Warn("failed to check link presence", "chatID", chatID, "url", link, "error", err)
+		return false
+	}
+	for _, trackedLink := range links {
+		if trackedLink.URL == link {
+			return true
+		}
+	}
+	return false
+}
+
 func mapRPCError(action string, err error) error {
 	st, ok := status.FromError(err)
 	if !ok {
 		return fmt.Errorf("%s: %w", action, err)
 	}
 
-	switch st.Code() {
-	case codes.NotFound:
+	if st.Code() == codes.NotFound {
 		switch st.Message() {
 		case ports.ErrChatNotFound.Error():
 			return fmt.Errorf("%s: %w", action, ports.ErrChatNotFound)
 		case ports.ErrLinkNotFound.Error():
 			return fmt.Errorf("%s: %w", action, ports.ErrLinkNotFound)
 		}
-	case codes.AlreadyExists:
+	}
+
+	if st.Code() == codes.AlreadyExists {
 		switch st.Message() {
 		case ports.ErrChatAlreadyExists.Error():
 			return fmt.Errorf("%s: %w", action, ports.ErrChatAlreadyExists)

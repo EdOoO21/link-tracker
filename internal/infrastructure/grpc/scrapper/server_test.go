@@ -33,13 +33,13 @@ func (m *mockScrapperService) AddLink(link models.AddLink) error {
 	return m.addLinkErr
 }
 
-func (m *mockScrapperService) GetLinks(chatID int64, tags []string) ([]domain.Link, error) {
+func (m *mockScrapperService) GetLinks(_ int64, _ []string) ([]domain.Link, error) {
 	return m.listLinksResp, m.listLinksErr
 }
 
-func (m *mockScrapperService) DeleteLink(link models.DeleteLink) error { return nil }
-func (m *mockScrapperService) AddChat(chatID int64) error              { return nil }
-func (m *mockScrapperService) DeleteChat(chatID int64) error           { return nil }
+func (m *mockScrapperService) DeleteLink(_ models.DeleteLink) error { return nil }
+func (m *mockScrapperService) AddChat(_ int64) error                { return nil }
+func (m *mockScrapperService) DeleteChat(_ int64) error             { return nil }
 
 func TestScrapperServiceServerAddLink(t *testing.T) {
 	service := &mockScrapperService{}

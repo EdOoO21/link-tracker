@@ -30,24 +30,24 @@ type mockScrapperServiceClient struct {
 	listLinksErr     error
 }
 
-func (m *mockScrapperServiceClient) AddChat(ctx context.Context, in *pc.ChatRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (m *mockScrapperServiceClient) AddChat(_ context.Context, _ *pc.ChatRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockScrapperServiceClient) DeleteChat(ctx context.Context, in *pc.ChatRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (m *mockScrapperServiceClient) DeleteChat(_ context.Context, _ *pc.ChatRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockScrapperServiceClient) AddLink(ctx context.Context, in *pc.AddLinkRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (m *mockScrapperServiceClient) AddLink(_ context.Context, in *pc.AddLinkRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	m.addLinkRequest = in
 	return &empty.Empty{}, m.addLinkErr
 }
 
-func (m *mockScrapperServiceClient) DeleteLink(ctx context.Context, in *pc.DeleteLinkRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (m *mockScrapperServiceClient) DeleteLink(_ context.Context, _ *pc.DeleteLinkRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockScrapperServiceClient) ListLinks(ctx context.Context, in *pc.ListLinksRequest, opts ...grpc.CallOption) (*pc.ListLinksResponse, error) {
+func (m *mockScrapperServiceClient) ListLinks(_ context.Context, in *pc.ListLinksRequest, _ ...grpc.CallOption) (*pc.ListLinksResponse, error) {
 	m.listLinksRequest = in
 	return m.listLinksResp, m.listLinksErr
 }

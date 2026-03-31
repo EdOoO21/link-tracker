@@ -56,8 +56,8 @@ func (s *stubRepo) UnTrackLink(chatID int64, url string) bool {
 	return s.untrackOK
 }
 
-func (s *stubRepo) ListLinks(chatID int64, tags []string) []domain.Link { return s.listResp }
-func (s *stubRepo) ListAllLinks() map[int64][]domain.Link               { return s.allLinks }
+func (s *stubRepo) ListLinks(_ int64, _ []string) []domain.Link { return s.listResp }
+func (s *stubRepo) ListAllLinks() map[int64][]domain.Link       { return s.allLinks }
 
 func (s *stubRepo) UpdateLinksLastUpdate(chatID int64, url string, lastUpdate time.Time) error {
 	s.updated.chatID = chatID
@@ -66,9 +66,9 @@ func (s *stubRepo) UpdateLinksLastUpdate(chatID int64, url string, lastUpdate ti
 	return s.updateErr
 }
 
-func (s *stubRepo) IsPresent(chatID int64) bool  { return s.present[chatID] }
-func (s *stubRepo) AddChat(chatID int64) bool    { return s.addChatOK }
-func (s *stubRepo) DeleteChat(chatID int64) bool { return s.deleteOK }
+func (s *stubRepo) IsPresent(chatID int64) bool { return s.present[chatID] }
+func (s *stubRepo) AddChat(_ int64) bool        { return s.addChatOK }
+func (s *stubRepo) DeleteChat(_ int64) bool     { return s.deleteOK }
 
 type stubBotClient struct {
 	err error
@@ -79,8 +79,8 @@ type stubBotClient struct {
 	}
 }
 
-func (s *stubBotClient) SendUpdates(chatIDS []int64, url, description string) error {
-	s.got.chatIDs = chatIDS
+func (s *stubBotClient) SendUpdates(chatIDs []int64, url, description string) error {
+	s.got.chatIDs = chatIDs
 	s.got.url = url
 	s.got.description = description
 	return s.err
@@ -102,7 +102,7 @@ func (s *stubGithub) GetRepoUpdate(owner, repo string) (ports.ResourceUpdate, er
 	return s.update, s.updateErr
 }
 
-func (s *stubGithub) ParseGitHubURL(raw string) (owner, repo string, err error) {
+func (s *stubGithub) ParseGitHubURL(_ string) (owner, repo string, err error) {
 	if s.parseErr != nil {
 		return "", "", s.parseErr
 	}
@@ -122,7 +122,7 @@ func (s *stubStackOverflow) GetQuestionUpdate(questionID string) (ports.Resource
 	return s.update, s.updateErr
 }
 
-func (s *stubStackOverflow) ParseStackOverflowURL(raw string) (string, error) {
+func (s *stubStackOverflow) ParseStackOverflowURL(_ string) (string, error) {
 	if s.parseErr != nil {
 		return "", s.parseErr
 	}
@@ -155,18 +155,18 @@ func TestScrapperCRUD(t *testing.T) {
 		t.Fatalf("got links len %d", len(links))
 	}
 
-	if err := svc.DeleteLink(models.DeleteLink{ChatID: 1, URL: "https://github.com/user/repo"}); err != nil {
-		t.Fatalf("unexpected delete link error: %v", err)
+	if deleteErr := svc.DeleteLink(models.DeleteLink{ChatID: 1, URL: "https://github.com/user/repo"}); deleteErr != nil {
+		t.Fatalf("unexpected delete link error: %v", deleteErr)
 	}
 	if repo.untrackArgs.url != "https://github.com/user/repo" {
 		t.Fatalf("got untrack args %+v", repo.untrackArgs)
 	}
 
-	if err := svc.AddChat(2); err != nil {
-		t.Fatalf("unexpected add chat error: %v", err)
+	if addChatErr := svc.AddChat(2); addChatErr != nil {
+		t.Fatalf("unexpected add chat error: %v", addChatErr)
 	}
-	if err := svc.DeleteChat(2); err != nil {
-		t.Fatalf("unexpected delete chat error: %v", err)
+	if deleteChatErr := svc.DeleteChat(2); deleteChatErr != nil {
+		t.Fatalf("unexpected delete chat error: %v", deleteChatErr)
 	}
 }
 

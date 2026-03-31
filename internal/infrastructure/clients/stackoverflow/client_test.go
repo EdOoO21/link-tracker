@@ -10,7 +10,7 @@ import (
 )
 
 func TestGetQuestionUpdate(t *testing.T) {
-	unixTs := time.Date(2026, 3, 30, 19, 0, 0, 0, time.UTC).Unix()
+	unixTS := time.Date(2026, 3, 30, 19, 0, 0, 0, time.UTC).Unix()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/questions/123" {
 			t.Fatalf("got path %q", r.URL.Path)
@@ -19,7 +19,7 @@ func TestGetQuestionUpdate(t *testing.T) {
 			t.Fatalf("got query %q", r.URL.RawQuery)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"items":[{"last_activity_date":%d}]}`, unixTs)
+		_, _ = fmt.Fprintf(w, `{"items":[{"last_activity_date":%d}]}`, unixTS)
 	}))
 	defer server.Close()
 
@@ -31,8 +31,8 @@ func TestGetQuestionUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if update.LastUpdate.Unix() != unixTs {
-		t.Fatalf("got unix %d, want %d", update.LastUpdate.Unix(), unixTs)
+	if update.LastUpdate.Unix() != unixTS {
+		t.Fatalf("got unix %d, want %d", update.LastUpdate.Unix(), unixTS)
 	}
 }
 
@@ -48,7 +48,7 @@ func TestGetQuestionUpdateErrors(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(tt.status)
 			if tt.body != "" {
 				_, _ = w.Write([]byte(tt.body))
@@ -77,10 +77,10 @@ func TestParseStackOverflowURL(t *testing.T) {
 		t.Fatalf("got id %q", id)
 	}
 
-	if _, err := client.ParseStackOverflowURL("https://google.com/questions/123/test"); err == nil {
+	if _, parseErr := client.ParseStackOverflowURL("https://google.com/questions/123/test"); parseErr == nil {
 		t.Fatal("expected error for non-stackoverflow url")
 	}
-	if _, err := client.ParseStackOverflowURL("https://stackoverflow.com/users/123"); err == nil {
+	if _, parseErr := client.ParseStackOverflowURL("https://stackoverflow.com/users/123"); parseErr == nil {
 		t.Fatal("expected error for invalid stackoverflow path")
 	}
 }

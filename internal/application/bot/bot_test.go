@@ -13,6 +13,7 @@ func TestComputeGotLink(t *testing.T) {
 	tests := []struct {
 		name          string
 		input         string
+		linkExists    bool
 		wantText      string
 		wantCommand   string
 		wantState     State
@@ -20,11 +21,15 @@ func TestComputeGotLink(t *testing.T) {
 	}{
 		{name: "invalid url", input: "tbank://github.com/user/repo", wantText: InvalidURL, wantCommand: TextInvalidLinkGot, wantState: TrackCommandGot},
 		{name: "unsupported domain", input: "https://google.com", wantText: NotSupportedURL, wantCommand: TextNotSupportedLinkGot, wantState: TrackCommandGot},
+		{name: "already tracked", input: "https://github.com/user/repo", linkExists: true, wantText: TrackExistedURLNoReset, wantCommand: URLExists, wantState: TrackCommandGot},
 		{name: "valid github url", input: "https://github.com/user/repo", wantText: ValidURL, wantCommand: TextValidLinkGot, wantState: LinkGot, wantStoredURL: "https://github.com/user/repo"},
 	}
 
 	for _, tt := range tests {
-		app := &App{stMachine: StateMachine{chatID: {State: TrackCommandGot}}}
+		app := &App{
+			repo:      &mockRepo{linkExists: tt.linkExists},
+			stMachine: StateMachine{chatID: {State: TrackCommandGot}},
+		}
 		msg, command := app.computeGotLink(chatID, tt.input)
 
 		if msg.Text != tt.wantText {
@@ -128,7 +133,7 @@ func TestLinksOutput(t *testing.T) {
 	}
 
 	got := linksOutput(links)
-	want := "Ссылки:\n\n1 https://github.com/user/repo1\n2 https://github.com/user/repo2\n"
+	want := "Ссылки:\n\n1. https://github.com/user/repo1\n2. https://github.com/user/repo2\n"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}

@@ -2,6 +2,7 @@ package scrapper
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,11 +21,13 @@ type Client struct {
 	logger    ports.Logger
 }
 
+const requestTimeout = 5 * time.Second
+
 func NewClient(logger ports.Logger, sourceURL string) *Client {
 	return &Client{
 		sourceURL: sourceURL,
 		client: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: requestTimeout,
 		},
 		logger: logger,
 	}
@@ -158,6 +161,20 @@ func (c *Client) ListLinks(chatID int64, tags []string) ([]domain.Link, error) {
 	return ToDomainLinks(data.Links), nil
 }
 
+func (c *Client) IsLinkPresent(chatID int64, link string) bool {
+	links, err := c.ListLinks(chatID, nil)
+	if err != nil {
+		c.logger.Warn("failed to check link presence", "chatID", chatID, "url", link, "error", err)
+		return false
+	}
+	for _, trackedLink := range links {
+		if trackedLink.URL == link {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Client) doRequest(method, path string, chatID *int64, body io.Reader, query url.Values) (*http.Response, error) {
 	if query != nil {
 		encoded := query.Encode()
@@ -166,9 +183,9 @@ func (c *Client) doRequest(method, path string, chatID *int64, body io.Reader, q
 		}
 	}
 
-	req, err := http.NewRequest(method, path, body)
+	req, err := http.NewRequestWithContext(context.Background(), method, path, body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	if chatID != nil {
@@ -180,7 +197,7 @@ func (c *Client) doRequest(method, path string, chatID *int64, body io.Reader, q
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("send request: %w", err)
 	}
 	return resp, nil
 }

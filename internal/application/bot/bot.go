@@ -28,16 +28,18 @@ const (
 const (
 	HelpCommand = "/start - начало работы пользователя\n" +
 		"/help - вывод списка доступных команд\n" +
-		"/track - начать отслеживание ссылки (опционально с тегами)\n" +
+		"/track - начать процесс добавления ссылки к отслеживанию\n" +
 		"/untrack - прекратить отслеживание ссылки\n" +
-		"/list - вывести список всех отслеживаемых ссылок (опционально фильтр по тегу)"
+		"/list - вывести список всех отслеживаемых ссылок (опционально фильтр по тегу)\n" +
+		"/cancel - прекратить процесс добавления ссылки к отслеживанию"
 	StartCommand              = "Добро пожаловать! Используйте /help, чтобы посмотреть доступные команды. Вы можете отслеживать источники."
 	StartCommandFailedChatAdd = "Добро пожаловать! Используйте /help, чтобы посмотреть доступные команды.\nК сожалению, не удалось предоставить вам возомжность отслеживания источников, попробуйте позже снова с помощью /start."
 	UnknownCommand            = "Неизвестная команда. Воспользуйтесь /help, чтобы посмотреть список доступных команд."
 	AddingToTrackSeqStarted   = "Введите корректный URL источника: "
 	AddingToTrackSeqRestarted = "Процесс добавления источника начинается заново, введите корректный URL источника: "
 	TrackNoURL                = "Для того, чтобы начать отслеживание ссылки, пожалуйста, передайте ссылку в качестве параметра (/track google.com)."
-	TrackExistedURL           = "Ссылка уже отслеживается."
+	TrackExistedURLWithReset  = "Ссылка уже отслеживается, процесс завершен неудачно."
+	TrackExistedURLNoReset    = "Ссылка уже отслеживается, попробуйте отправить новую ссылку снова."
 	TrackNotExistedURL        = "Ссылка успешно добавлена к отслеживанию."
 	TrackErrorToAddLink       = "Произошла непредвиденная при добавлении ссыкли к отслеживанию.\nПопробуйте снова через некоторое время."
 	UntrackNotOneURL          = "Для того, чтобы перестать отслеживать ссылку, пожалуйста, передайте только ссылку в качестве параметра (/untrack google.com)."
@@ -47,10 +49,11 @@ const (
 	LinksNotExist             = "Отслеживаемых ссылок не найдено."
 	LinksListFailed           = "Произошла непредвиденная при поиске всех отслеживаемых ссылок.\nПопробуйте снова через некоторое время."
 	CancelCommand             = "Добавление ссылки к отслеживанию прервано."
+	CancelCommandNothingGot   = "Нечего отменять: процесс добавления ссылки не был запущен или был прерван ранее другой командой. Используйте /help для описания команд."
 	ChatIDNotFound            = "Вам не предоставлена возможность отслеживать источники.\n Попробуйте /start."
 	UnknownText               = "Неопознанный текст. Воспользуйтесь /help для списка доступных команд."
 	InvalidURL                = "Невалидная ссылка, пожалуйста, попробуйте снова."
-	ValidURL                  = `Ссыслка успешно принята, далее отправьте теги в формате "тег, тег, тег..."`
+	ValidURL                  = `Ссылка успешно принята, далее отправьте теги в формате "тег, тег, тег..." или "-" если без тегов`
 	NotSupportedURL           = "Не поддерживаемый домен. На данный момент поддерживаются только github.com и stackoverflow.com"
 )
 
@@ -78,7 +81,7 @@ func NewApp(logger ports.Logger, config *settings.Config, repo inf.Repository, b
 
 func (a *App) SendUpdateMessages(updates models.SendUpdates) error {
 	failed := false
-	for _, chatID := range updates.ChatIDS {
+	for _, chatID := range updates.ChatIDs {
 		msg := tgbotapi.NewMessage(chatID, linkUpdated(updates.URL, updates.Description))
 		_, err := a.bot.Send(msg)
 		if err != nil {
@@ -126,7 +129,9 @@ func (a *App) Run() error {
 func (a *App) computeText(chatID int64, text string) (tgbotapi.MessageConfig, string) {
 	var msg tgbotapi.MessageConfig
 	command := NotCommand
-	switch a.state(chatID).State {
+	switch a.stMachine.State(chatID).State {
+	case NothingGot:
+		msg = tgbotapi.NewMessage(chatID, UnknownText)
 	case TrackCommandGot:
 		msg, command = a.computeGotLink(chatID, text)
 	case LinkGot:
@@ -145,8 +150,11 @@ func (a *App) computeGotLink(chatID int64, text string) (tgbotapi.MessageConfig,
 	if u.Host != "github.com" && u.Host != "stackoverflow.com" {
 		return tgbotapi.NewMessage(chatID, NotSupportedURL), TextNotSupportedLinkGot
 	}
-	a.state(chatID).URL = u.String()
-	a.state(chatID).State = LinkGot
+	if a.repo.IsLinkPresent(chatID, u.String()) {
+		return tgbotapi.NewMessage(chatID, TrackExistedURLNoReset), URLExists
+	}
+	a.stMachine.State(chatID).URL = u.String()
+	a.stMachine.State(chatID).State = LinkGot
 
 	return tgbotapi.NewMessage(chatID, ValidURL), TextValidLinkGot
 }
@@ -154,6 +162,9 @@ func (a *App) computeGotLink(chatID int64, text string) (tgbotapi.MessageConfig,
 func (a *App) computeGotTags(chatID int64, text string) (tgbotapi.MessageConfig, string) {
 	var msg tgbotapi.MessageConfig
 	var command string
+	if strings.TrimSpace(text) == "-" {
+		text = ""
+	}
 	t := strings.Split(text, ",")
 	tags := make([]string, 0)
 	for i := range t {
@@ -162,21 +173,22 @@ func (a *App) computeGotTags(chatID int64, text string) (tgbotapi.MessageConfig,
 			tags = append(tags, tag)
 		}
 	}
-	if err := a.repo.TrackLink(chatID, a.state(chatID).URL, tags); errors.Is(err, ports.ErrLinkAlreadyExists) {
-		msg = tgbotapi.NewMessage(chatID, TrackExistedURL)
+	switch err := a.repo.TrackLink(chatID, a.stMachine.State(chatID).URL, tags); {
+	case errors.Is(err, ports.ErrLinkAlreadyExists):
+		msg = tgbotapi.NewMessage(chatID, TrackExistedURLWithReset)
 		command = URLExists
-	} else if errors.Is(err, ports.ErrChatNotFound) {
+	case errors.Is(err, ports.ErrChatNotFound):
 		msg = tgbotapi.NewMessage(chatID, ChatIDNotFound)
 		command = ChatIDNotFound
-	} else if err != nil {
+	case err != nil:
 		msg = tgbotapi.NewMessage(chatID, TrackErrorToAddLink)
 		command = UnexpectedErrorToAddLink
-	} else {
+	default:
 		msg = tgbotapi.NewMessage(chatID, TrackNotExistedURL)
 		command = URLAdded
 	}
 
-	delete(a.stMachine, chatID)
+	a.stMachine.Reset(chatID)
 
 	return msg, command
 }
@@ -204,16 +216,16 @@ func (a *App) moderateCommand(command string, update tgbotapi.Update) (tgbotapi.
 }
 
 func (a *App) computeHelp(chatID int64) tgbotapi.MessageConfig {
-	if a.hasActiveState(chatID) {
-		delete(a.stMachine, chatID)
+	if a.stMachine.HasActiveState(chatID) {
+		a.stMachine.Reset(chatID)
 	}
 	return tgbotapi.NewMessage(chatID, HelpCommand)
 }
 
 func (a *App) computeStart(chatID int64) tgbotapi.MessageConfig {
 	var msg tgbotapi.MessageConfig
-	if a.hasActiveState(chatID) {
-		delete(a.stMachine, chatID)
+	if a.stMachine.HasActiveState(chatID) {
+		a.stMachine.Reset(chatID)
 	}
 	err := a.repo.AddChat(chatID)
 	if err != nil && !errors.Is(err, ports.ErrChatAlreadyExists) {
@@ -228,17 +240,12 @@ func (a *App) computeTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 	var msg tgbotapi.MessageConfig
 	chatID := update.Message.Chat.ID
 
-	if a.state(chatID).State == NothingGot {
+	if a.stMachine.State(chatID).State == NothingGot {
 		msg = tgbotapi.NewMessage(chatID, AddingToTrackSeqStarted)
 	} else {
 		msg = tgbotapi.NewMessage(chatID, AddingToTrackSeqRestarted)
 	}
-	if _, ok := a.stMachine[chatID]; !ok {
-		a.stMachine[chatID] = &StateInfo{State: TrackCommandGot, URL: ""}
-	} else {
-		a.stMachine[chatID].State = TrackCommandGot
-		a.stMachine[chatID].URL = ""
-	}
+	a.stMachine.StartTrack(chatID)
 	return msg
 }
 
@@ -247,8 +254,8 @@ func (a *App) computeUnTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 	var msg tgbotapi.MessageConfig
 	var url string
 	chatID := update.Message.Chat.ID
-	if a.hasActiveState(chatID) {
-		delete(a.stMachine, chatID)
+	if a.stMachine.HasActiveState(chatID) {
+		a.stMachine.Reset(chatID)
 	}
 	if len(args) == 1 {
 		url = args[0]
@@ -257,13 +264,14 @@ func (a *App) computeUnTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 	}
 
 	if url != "" {
-		if err := a.repo.UnTrackLink(chatID, url); errors.Is(err, ports.ErrLinkNotFound) {
+		switch err := a.repo.UnTrackLink(chatID, url); {
+		case errors.Is(err, ports.ErrLinkNotFound):
 			msg = tgbotapi.NewMessage(chatID, UntrackNotExistedURL)
-		} else if errors.Is(err, ports.ErrChatNotFound) {
+		case errors.Is(err, ports.ErrChatNotFound):
 			msg = tgbotapi.NewMessage(chatID, ChatIDNotFound)
-		} else if err != nil {
+		case err != nil:
 			msg = tgbotapi.NewMessage(chatID, UntrackErrToDeleteLink)
-		} else {
+		default:
 			msg = tgbotapi.NewMessage(chatID, UntrackExistedURL)
 		}
 	}
@@ -274,33 +282,35 @@ func (a *App) computeList(update tgbotapi.Update) tgbotapi.MessageConfig {
 	tags := strings.Fields(update.Message.CommandArguments())
 	var msg tgbotapi.MessageConfig
 	chatID := update.Message.Chat.ID
-	if a.hasActiveState(chatID) {
-		delete(a.stMachine, chatID)
+	if a.stMachine.HasActiveState(chatID) {
+		a.stMachine.Reset(chatID)
 	}
 	links, err := a.repo.ListLinks(chatID, tags)
-	if errors.Is(err, ports.ErrChatNotFound) {
+	switch {
+	case errors.Is(err, ports.ErrChatNotFound):
 		msg = tgbotapi.NewMessage(chatID, ChatIDNotFound)
-	} else if err != nil {
+	case err != nil:
 		msg = tgbotapi.NewMessage(chatID, LinksListFailed)
-	} else {
-		if len(links) == 0 {
-			msg = tgbotapi.NewMessage(chatID, LinksNotExist)
-		} else {
-			msg = tgbotapi.NewMessage(chatID, linksOutput(links))
-		}
+	case len(links) == 0:
+		msg = tgbotapi.NewMessage(chatID, LinksNotExist)
+	default:
+		msg = tgbotapi.NewMessage(chatID, linksOutput(links))
 	}
 
 	return msg
 }
 
 func (a *App) computeCancel(chatID int64) tgbotapi.MessageConfig {
-	delete(a.stMachine, chatID)
+	if a.stMachine.State(chatID).State == NothingGot {
+		return tgbotapi.NewMessage(chatID, CancelCommandNothingGot)
+	}
+	a.stMachine.Reset(chatID)
 	return tgbotapi.NewMessage(chatID, CancelCommand)
 }
 
 func (a *App) computeUnknownCommand(chatID int64, command string) (tgbotapi.MessageConfig, string) {
-	if a.hasActiveState(chatID) {
-		delete(a.stMachine, chatID)
+	if a.stMachine.HasActiveState(chatID) {
+		a.stMachine.Reset(chatID)
 	}
 	msg := tgbotapi.NewMessage(chatID, UnknownCommand)
 
@@ -308,20 +318,6 @@ func (a *App) computeUnknownCommand(chatID int64, command string) (tgbotapi.Mess
 		command = Unknown
 	}
 	return msg, command
-}
-
-func (a *App) hasActiveState(chatID int64) bool {
-	stateInfo, ok := a.stMachine[chatID]
-	return ok && stateInfo != nil && stateInfo.State != NothingGot
-}
-
-func (a *App) state(chatID int64) *StateInfo {
-	stateInfo, ok := a.stMachine[chatID]
-	if !ok || stateInfo == nil {
-		stateInfo = &StateInfo{State: NothingGot}
-		a.stMachine[chatID] = stateInfo
-	}
-	return stateInfo
 }
 
 func linkUpdated(link, description string) string {
@@ -345,7 +341,7 @@ func linksOutput(links []domain.Link) string {
 	text.WriteString("\n\n")
 	for i, v := range links {
 		text.WriteString(strconv.Itoa(i + 1))
-		text.WriteString(" ")
+		text.WriteString(". ")
 		text.WriteString(v.URL)
 		text.WriteString("\n")
 	}
