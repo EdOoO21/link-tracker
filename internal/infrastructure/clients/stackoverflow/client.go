@@ -1,7 +1,9 @@
 package stackoverflow
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,42 +13,47 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
 )
 
-type StackOverflowClient struct {
+const (
+	requestTimeout       = 5 * time.Second
+	minQuestionPathParts = 2
+)
+
+type Client struct {
 	baseURL string
 	client  *http.Client
 }
 
-func NewStackOverflowClient() *StackOverflowClient {
-	return &StackOverflowClient{
+func NewStackOverflowClient() *Client {
+	return &Client{
 		baseURL: "https://api.stackexchange.com/2.3",
-		client:  &http.Client{Timeout: 5 * time.Second},
+		client:  &http.Client{Timeout: requestTimeout},
 	}
 }
 
-func (c *StackOverflowClient) GetQuestionUpdate(questionID string) (ports.ResourceUpdate, error) {
+func (c *Client) GetQuestionUpdate(questionID string) (ports.ResourceUpdate, error) {
 	endpoint := c.baseURL + "/questions/" + questionID + "?site=stackoverflow"
 
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
 	if err != nil {
-		return ports.ResourceUpdate{}, err
+		return ports.ResourceUpdate{}, fmt.Errorf("create request: %w", err)
 	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return ports.ResourceUpdate{}, err
+		return ports.ResourceUpdate{}, fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeResponseBody(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return ports.ResourceUpdate{}, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
 	var data stackOverflowQuestionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return ports.ResourceUpdate{}, err
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&data); decodeErr != nil {
+		return ports.ResourceUpdate{}, fmt.Errorf("decode response: %w", decodeErr)
 	}
 	if len(data.Items) == 0 {
-		return ports.ResourceUpdate{}, fmt.Errorf("question not found")
+		return ports.ResourceUpdate{}, errors.New("question not found")
 	}
 
 	return ports.ResourceUpdate{
@@ -54,19 +61,23 @@ func (c *StackOverflowClient) GetQuestionUpdate(questionID string) (ports.Resour
 	}, nil
 }
 
-func (c *StackOverflowClient) ParseStackOverflowURL(raw string) (string, error) {
+func (c *Client) ParseStackOverflowURL(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse url: %w", err)
 	}
 	if u.Host != "stackoverflow.com" {
-		return "", fmt.Errorf("not stackoverflow url")
+		return "", errors.New("not stackoverflow url")
 	}
 
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) < 2 || parts[0] != "questions" {
-		return "", fmt.Errorf("invalid stackoverflow question url")
+	if len(parts) < minQuestionPathParts || parts[0] != "questions" {
+		return "", errors.New("invalid stackoverflow question url")
 	}
 
 	return parts[1], nil
+}
+
+func closeResponseBody(resp *http.Response) {
+	_ = resp.Body.Close()
 }

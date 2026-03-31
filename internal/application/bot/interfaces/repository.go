@@ -14,4 +14,7 @@ type Repository interface {
 	AddChat(chatID int64) error
 	// returns ports.ErrChatNotFound if link exits, otherwise nil or other error
 	DeleteChat(chatID int64) error
+
+	// returns true if link exits, otherwise false
+	IsLinkPresent(chatID int64, link string) bool
 }

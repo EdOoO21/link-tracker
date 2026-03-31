@@ -1,0 +1,6 @@
+.git
+.gitignore
+coverage.out
+coverage_no_proto_no_cmd.out
+*.test
+bin/

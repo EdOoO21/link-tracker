@@ -39,5 +39,8 @@ func (b *BotInit) GetUpdatesChan(config tgbotapi.UpdateConfig) tgbotapi.UpdatesC
 
 func (b *BotInit) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
 	msg, err := b.bot.Send(c)
-	return msg, fmt.Errorf("telegram send: %w", err)
+	if err != nil {
+		return msg, fmt.Errorf("telegram send: %w", err)
+	}
+	return msg, nil
 }

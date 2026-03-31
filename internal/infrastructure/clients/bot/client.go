@@ -2,7 +2,9 @@ package bot
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -16,22 +18,24 @@ type Client struct {
 	logger    ports.Logger
 }
 
+const requestTimeout = 5 * time.Second
+
 func NewClient(logger ports.Logger, sourceURL string) *Client {
 	return &Client{
 		sourceURL: sourceURL,
 		client: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: requestTimeout,
 		},
 		logger: logger,
 	}
 }
 
-func (c *Client) SendUpdates(chatIDS []int64, url, description string) error {
+func (c *Client) SendUpdates(chatIDs []int64, url, description string) error {
 	endpoint := c.sourceURL + "/updates"
 	reqBody := &SendUpdatesRequest{
 		URL:         url,
 		Description: description,
-		ChatIDS:     chatIDS,
+		ChatIDs:     chatIDs,
 	}
 
 	data, err := json.Marshal(reqBody)
@@ -39,7 +43,7 @@ func (c *Client) SendUpdates(chatIDS []int64, url, description string) error {
 		return fmt.Errorf("marshal json: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("request create: %w", err)
 	}
@@ -54,11 +58,11 @@ func (c *Client) SendUpdates(chatIDS []int64, url, description string) error {
 	defer c.closeResp(resp)
 
 	if resp.StatusCode == http.StatusBadRequest {
-		return fmt.Errorf("invalid request")
+		return errors.New("invalid request")
 	}
 
 	if resp.StatusCode == http.StatusInternalServerError {
-		return fmt.Errorf("failed to send updates to some chats")
+		return errors.New("failed to send updates to some chats")
 	}
 
 	if resp.StatusCode != http.StatusOK {

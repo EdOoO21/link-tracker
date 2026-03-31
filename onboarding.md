@@ -1,46 +1,21 @@
-1. перейдите в корневую папку проекта
-
-2. создайте `.env` одним блоком:
-
-```bash
-cat > .env <<'ENV'
-APP_TELEGRAM_TOKEN=your_telegram_token_here
+1. перейдите в корневую папку
+2. добавьте свой токен в .env (APP_TELEGRAM_TOKEN=..)
+3. добавьте в .env
 APP_TELEGRAM_COMMANDS_PATH=commands.json
-APP_SCRAPPER_BASE_URL=http://localhost:8080
-APP_BOT_BASE_URL=http://localhost:8090
-
-APP_POSTGRES_DB=link_tracker
-APP_DATABASE_USER=example_user
-APP_DATABASE_PASSWORD=example_password
-APP_DATABASE_URL=postgres://example_user:example_password@localhost:5432/link_tracker?sslmode=disable
-
+APP_SCRAPPER_BASE_URL=http://localhost:9080
+APP_BOT_BASE_URL=http://localhost:9090
+APP_POSTGRES_DB=db_example
+APP_DATABASE_USER=user_example
+APP_DATABASE_PASSWORD=pass_example
+APP_DATABASE_URL=postgres://user_example:pass_example@localhost:5432/db_example?sslmode=disable
 APP_DATABASE_ACCESS_TYPE=SQL
-ENV
-```
-
-3. поднимите postgres:
-
-```bash
-docker compose up -d postgres
-```
-
-4. загрузите переменные окружения:
-
-```bash
-set -a
-source .env
-set +a
-```
-
-5. запустите сервисы в двух отдельных терминалах:
-
-```bash
-go run ./cmd/bot
-```
-
-```bash
-go run ./cmd/scrapper
-```
-
-`example_user`, `example_password` и `APP_DATABASE_URL` в примере выше - это просто для примера
-
+4. поднимите postgres `docker compose up -d postgres`
+5. set -a
+6. source ./.env
+7. set +a
+8. go run ./cmd/scrapper
+9. go run ./cmd/bot
+10.  интеграционный тест `RUN_TESTCONTAINERS=1 go test ./internal/integration -count=1 -v` - надо запустить docker daemon
+11. тесты без gen `go test $(go list ./... | grep -v '/proto/gen$' | grep -v '/cmd/') -count=1 -coverprofile=coverage.out`
+12. cover `go tool cover -func=coverage.out`
+13. линтер `golangci-lint run -c .golangci.yml`

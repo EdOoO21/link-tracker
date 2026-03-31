@@ -13,7 +13,7 @@ func (h *Handler) PostUpdates(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json body", http.StatusBadRequest)
 		return
 	}
-	if len(req.ChatIDS) <= 0 {
+	if len(req.ChatIDs) == 0 {
 		http.Error(w, "chatIDs is empty in json body", http.StatusBadRequest)
 		return
 	}
