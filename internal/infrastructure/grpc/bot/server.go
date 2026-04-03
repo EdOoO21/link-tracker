@@ -25,14 +25,14 @@ func NewBotServiceServer(logger ports.Logger, botService botinterfaces.BotServic
 	}
 }
 
-func (b *ServiceServer) SendUpdates(_ context.Context, req *pb.SendUpdatesRequest) (*empty.Empty, error) {
+func (b *ServiceServer) SendUpdates(ctx context.Context, req *pb.SendUpdatesRequest) (*empty.Empty, error) {
 	updates := serviceModels.SendUpdates{
 		URL:         req.GetUrl(),
 		ChatIDs:     req.GetTgChatIds(),
 		Description: req.GetDescription(),
 	}
 
-	if err := b.botService.SendUpdateMessages(updates); err != nil {
+	if err := b.botService.SendUpdateMessages(ctx, updates); err != nil {
 		b.logger.Error("failed to send updates via grpc", "error", err)
 		return nil, toStatusError(err)
 	}

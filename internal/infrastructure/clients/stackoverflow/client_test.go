@@ -1,12 +1,17 @@
 package stackoverflow
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+)
+
+const (
+	RequestTimeout = 5 * time.Second
 )
 
 func TestGetQuestionUpdate(t *testing.T) {
@@ -26,8 +31,10 @@ func TestGetQuestionUpdate(t *testing.T) {
 	client := NewStackOverflowClient()
 	client.baseURL = server.URL
 	client.client = server.Client()
+	reqCtx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
 
-	update, err := client.GetQuestionUpdate("123")
+	update, err := client.GetQuestionUpdate(reqCtx, "123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,6 +53,8 @@ func TestGetQuestionUpdateErrors(t *testing.T) {
 		{name: "unexpected status", status: http.StatusNotFound, wantErr: "unexpected status"},
 		{name: "empty items", status: http.StatusOK, body: `{"items":[]}`, wantErr: "question not found"},
 	}
+	reqCtx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
 
 	for _, tt := range tests {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -59,7 +68,7 @@ func TestGetQuestionUpdateErrors(t *testing.T) {
 		client.baseURL = server.URL
 		client.client = server.Client()
 
-		_, err := client.GetQuestionUpdate("123")
+		_, err := client.GetQuestionUpdate(reqCtx, "123")
 		server.Close()
 		if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 			t.Fatalf("case %q: got err %v, want containing %q", tt.name, err, tt.wantErr)

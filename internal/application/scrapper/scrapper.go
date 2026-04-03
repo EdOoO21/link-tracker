@@ -1,6 +1,7 @@
 package scrapper
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -38,19 +39,28 @@ func NewScrapper(logger ports.Logger,
 	}
 }
 
-func (s *Scrapper) RunCron(interval time.Duration) {
+func (s *Scrapper) RunCron(ctx context.Context, interval time.Duration) {
 	s.logger.Info("scrapper cron scheduled", "interval", interval)
 	ticker := time.NewTicker(interval)
 	go func() {
-		for range ticker.C {
-			s.logger.Info("scrapper cron tick")
-			s.CheckLinks()
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				s.logger.Info("scrapper cron stopped", "error", ctx.Err())
+				return
+			case <-ticker.C:
+				s.logger.Info("scrapper cron tick")
+				s.CheckLinks(ctx)
+			}
+
 		}
 	}()
+
 }
 
-func (s *Scrapper) CheckLinks() {
-	allLinks := s.repo.ListAllLinks()
+func (s *Scrapper) CheckLinks(ctx context.Context) {
+	allLinks := s.repo.ListAllLinks(ctx)
 	totalLinks := 0
 	for _, links := range allLinks {
 		totalLinks += len(links)
@@ -62,7 +72,7 @@ func (s *Scrapper) CheckLinks() {
 		for _, link := range links {
 			s.logger.Info("checking link update", "chatID", chatID, "url", link.URL, "lastKnownUpdate", link.LastUpdate)
 
-			update, description, err := s.getResourceUpdate(link.URL)
+			update, description, err := s.getResourceUpdate(ctx, link.URL)
 			if err != nil {
 				s.logger.Warn("failed to get resource update", "chatID", chatID, "url", link.URL, "error", err)
 				continue
@@ -75,13 +85,13 @@ func (s *Scrapper) CheckLinks() {
 
 			s.logger.Info("new link update detected", "chatID", chatID, "url", link.URL, "lastKnownUpdate", link.LastUpdate, "actualLastUpdate", update.LastUpdate)
 
-			if err = s.botClient.SendUpdates([]int64{chatID}, link.URL, description); err != nil {
+			if err = s.botClient.SendUpdates(ctx, []int64{chatID}, link.URL, description); err != nil {
 				s.logger.Error("failed to send update notification", "chatID", chatID, "url", link.URL, "error", err)
 				continue
 			}
 			s.logger.Info("update notification sent", "chatID", chatID, "url", link.URL)
 
-			if err = s.repo.UpdateLinksLastUpdate(chatID, link.URL, update.LastUpdate); err != nil {
+			if err = s.repo.UpdateLinksLastUpdate(ctx, chatID, link.URL, update.LastUpdate); err != nil {
 				s.logger.Error("failed to update last update time", "chatID", chatID, "url", link.URL, "error", err)
 				continue
 			}
@@ -93,13 +103,13 @@ func (s *Scrapper) CheckLinks() {
 	s.logger.Info("scrapper links scan finished", "chats", len(allLinks), "links", totalLinks)
 }
 
-func (s *Scrapper) AddLink(link models.AddLink) error {
+func (s *Scrapper) AddLink(ctx context.Context, link models.AddLink) error {
 	s.logger.Info("add link requested", "chatID", link.ChatID, "url", link.URL, "tags", link.Tags)
-	if !s.repo.IsPresent(link.ChatID) {
+	if !s.repo.IsPresent(ctx, link.ChatID) {
 		s.logger.Warn("add link failed: chat not found", "chatID", link.ChatID, "url", link.URL)
 		return ports.ErrChatNotFound
 	}
-	if ok := s.repo.TrackLink(link.ChatID, link.URL, link.Tags); !ok {
+	if ok := s.repo.TrackLink(ctx, link.ChatID, link.URL, link.Tags); !ok {
 		s.logger.Warn("add link failed: link already exists", "chatID", link.ChatID, "url", link.URL)
 		return ports.ErrLinkAlreadyExists
 	}
@@ -107,14 +117,14 @@ func (s *Scrapper) AddLink(link models.AddLink) error {
 	return nil
 }
 
-func (s *Scrapper) DeleteLink(link models.DeleteLink) error {
+func (s *Scrapper) DeleteLink(ctx context.Context, link models.DeleteLink) error {
 	s.logger.Info("delete link requested", "chatID", link.ChatID, "url", link.URL)
-	if !s.repo.IsPresent(link.ChatID) {
+	if !s.repo.IsPresent(ctx, link.ChatID) {
 		s.logger.Warn("delete link failed: chat not found", "chatID", link.ChatID, "url", link.URL)
 		return ports.ErrChatNotFound
 	}
 
-	if ok := s.repo.UnTrackLink(link.ChatID, link.URL); !ok {
+	if ok := s.repo.UnTrackLink(ctx, link.ChatID, link.URL); !ok {
 		s.logger.Warn("delete link failed: link not found", "chatID", link.ChatID, "url", link.URL)
 		return ports.ErrLinkNotFound
 	}
@@ -122,21 +132,21 @@ func (s *Scrapper) DeleteLink(link models.DeleteLink) error {
 	return nil
 }
 
-func (s *Scrapper) GetLinks(chatID int64, tags []string) ([]domain.Link, error) {
+func (s *Scrapper) GetLinks(ctx context.Context, chatID int64, tags []string) ([]domain.Link, error) {
 	s.logger.Info("get links requested", "chatID", chatID, "tags", tags)
-	if !s.repo.IsPresent(chatID) {
+	if !s.repo.IsPresent(ctx, chatID) {
 		s.logger.Warn("get links failed: chat not found", "chatID", chatID, "tags", tags)
 		return nil, ports.ErrChatNotFound
 	}
 
-	links := s.repo.ListLinks(chatID, tags)
+	links := s.repo.ListLinks(ctx, chatID, tags)
 	s.logger.Info("links loaded", "chatID", chatID, "tags", tags, "count", len(links))
 	return links, nil
 }
 
-func (s *Scrapper) AddChat(chatID int64) error {
+func (s *Scrapper) AddChat(ctx context.Context, chatID int64) error {
 	s.logger.Info("add chat requested", "chatID", chatID)
-	if ok := s.repo.AddChat(chatID); !ok {
+	if ok := s.repo.AddChat(ctx, chatID); !ok {
 		s.logger.Warn("add chat failed: chat already exists", "chatID", chatID)
 		return ports.ErrChatAlreadyExists
 	}
@@ -144,9 +154,9 @@ func (s *Scrapper) AddChat(chatID int64) error {
 	return nil
 }
 
-func (s *Scrapper) DeleteChat(chatID int64) error {
+func (s *Scrapper) DeleteChat(ctx context.Context, chatID int64) error {
 	s.logger.Info("delete chat requested", "chatID", chatID)
-	if ok := s.repo.DeleteChat(chatID); !ok {
+	if ok := s.repo.DeleteChat(ctx, chatID); !ok {
 		s.logger.Warn("delete chat failed: chat not found", "chatID", chatID)
 		return ports.ErrChatNotFound
 	}
@@ -154,10 +164,10 @@ func (s *Scrapper) DeleteChat(chatID int64) error {
 	return nil
 }
 
-func (s *Scrapper) getResourceUpdate(rawURL string) (ports.ResourceUpdate, string, error) {
+func (s *Scrapper) getResourceUpdate(ctx context.Context, rawURL string) (ports.ResourceUpdate, string, error) {
 	if owner, repo, parseErr := s.sources.Github.ParseGitHubURL(rawURL); parseErr == nil {
 		s.logger.Info("resolved link source", "url", rawURL, "source", "github", "owner", owner, "repo", repo)
-		update, updateErr := s.sources.Github.GetRepoUpdate(owner, repo)
+		update, updateErr := s.sources.Github.GetRepoUpdate(ctx, owner, repo)
 		if updateErr != nil {
 			return ports.ResourceUpdate{}, "", fmt.Errorf("get github update: %w", updateErr)
 		}
@@ -167,7 +177,7 @@ func (s *Scrapper) getResourceUpdate(rawURL string) (ports.ResourceUpdate, strin
 
 	if questionID, parseErr := s.sources.StackOverflow.ParseStackOverflowURL(rawURL); parseErr == nil {
 		s.logger.Info("resolved link source", "url", rawURL, "source", "stackoverflow", "questionID", questionID)
-		update, updateErr := s.sources.StackOverflow.GetQuestionUpdate(questionID)
+		update, updateErr := s.sources.StackOverflow.GetQuestionUpdate(ctx, questionID)
 		if updateErr != nil {
 			return ports.ResourceUpdate{}, "", fmt.Errorf("get stackoverflow update: %w", updateErr)
 		}

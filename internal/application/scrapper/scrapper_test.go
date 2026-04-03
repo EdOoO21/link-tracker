@@ -1,6 +1,7 @@
 package scrapper
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -43,32 +44,32 @@ type stubRepo struct {
 	}
 }
 
-func (s *stubRepo) TrackLink(chatID int64, url string, tags []string) bool {
+func (s *stubRepo) TrackLink(_ context.Context, chatID int64, url string, tags []string) bool {
 	s.trackArgs.chatID = chatID
 	s.trackArgs.url = url
 	s.trackArgs.tags = tags
 	return s.trackOK
 }
 
-func (s *stubRepo) UnTrackLink(chatID int64, url string) bool {
+func (s *stubRepo) UnTrackLink(_ context.Context, chatID int64, url string) bool {
 	s.untrackArgs.chatID = chatID
 	s.untrackArgs.url = url
 	return s.untrackOK
 }
 
-func (s *stubRepo) ListLinks(_ int64, _ []string) []domain.Link { return s.listResp }
-func (s *stubRepo) ListAllLinks() map[int64][]domain.Link       { return s.allLinks }
+func (s *stubRepo) ListLinks(_ context.Context, _ int64, _ []string) []domain.Link { return s.listResp }
+func (s *stubRepo) ListAllLinks(_ context.Context) map[int64][]domain.Link         { return s.allLinks }
 
-func (s *stubRepo) UpdateLinksLastUpdate(chatID int64, url string, lastUpdate time.Time) error {
+func (s *stubRepo) UpdateLinksLastUpdate(_ context.Context, chatID int64, url string, lastUpdate time.Time) error {
 	s.updated.chatID = chatID
 	s.updated.url = url
 	s.updated.lastUpdate = lastUpdate
 	return s.updateErr
 }
 
-func (s *stubRepo) IsPresent(chatID int64) bool { return s.present[chatID] }
-func (s *stubRepo) AddChat(_ int64) bool        { return s.addChatOK }
-func (s *stubRepo) DeleteChat(_ int64) bool     { return s.deleteOK }
+func (s *stubRepo) IsPresent(_ context.Context, chatID int64) bool { return s.present[chatID] }
+func (s *stubRepo) AddChat(_ context.Context, _ int64) bool        { return s.addChatOK }
+func (s *stubRepo) DeleteChat(_ context.Context, _ int64) bool     { return s.deleteOK }
 
 type stubBotClient struct {
 	err error
@@ -79,7 +80,7 @@ type stubBotClient struct {
 	}
 }
 
-func (s *stubBotClient) SendUpdates(chatIDs []int64, url, description string) error {
+func (s *stubBotClient) SendUpdates(_ context.Context, chatIDs []int64, url, description string) error {
 	s.got.chatIDs = chatIDs
 	s.got.url = url
 	s.got.description = description
@@ -96,7 +97,7 @@ type stubGithub struct {
 	gotRepo   string
 }
 
-func (s *stubGithub) GetRepoUpdate(owner, repo string) (ports.ResourceUpdate, error) {
+func (s *stubGithub) GetRepoUpdate(_ context.Context, owner, repo string) (ports.ResourceUpdate, error) {
 	s.gotOwner = owner
 	s.gotRepo = repo
 	return s.update, s.updateErr
@@ -117,7 +118,7 @@ type stubStackOverflow struct {
 	gotID      string
 }
 
-func (s *stubStackOverflow) GetQuestionUpdate(questionID string) (ports.ResourceUpdate, error) {
+func (s *stubStackOverflow) GetQuestionUpdate(_ context.Context, questionID string) (ports.ResourceUpdate, error) {
 	s.gotID = questionID
 	return s.update, s.updateErr
 }
@@ -139,15 +140,15 @@ func TestScrapperCRUD(t *testing.T) {
 		listResp:  []domain.Link{{URL: "https://github.com/user/repo"}},
 	}
 	svc := NewScrapper(noopLogger{}, repo, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{})
-
-	if err := svc.AddLink(models.AddLink{ChatID: 1, URL: "https://github.com/user/repo", Tags: []string{"go"}}); err != nil {
+	ctx := context.Background()
+	if err := svc.AddLink(ctx, models.AddLink{ChatID: 1, URL: "https://github.com/user/repo", Tags: []string{"go"}}); err != nil {
 		t.Fatalf("unexpected add link error: %v", err)
 	}
 	if repo.trackArgs.chatID != 1 || repo.trackArgs.url != "https://github.com/user/repo" {
 		t.Fatalf("got track args %+v", repo.trackArgs)
 	}
 
-	links, err := svc.GetLinks(1, []string{"go"})
+	links, err := svc.GetLinks(ctx, 1, []string{"go"})
 	if err != nil {
 		t.Fatalf("unexpected get links error: %v", err)
 	}
@@ -155,46 +156,46 @@ func TestScrapperCRUD(t *testing.T) {
 		t.Fatalf("got links len %d", len(links))
 	}
 
-	if deleteErr := svc.DeleteLink(models.DeleteLink{ChatID: 1, URL: "https://github.com/user/repo"}); deleteErr != nil {
+	if deleteErr := svc.DeleteLink(ctx, models.DeleteLink{ChatID: 1, URL: "https://github.com/user/repo"}); deleteErr != nil {
 		t.Fatalf("unexpected delete link error: %v", deleteErr)
 	}
 	if repo.untrackArgs.url != "https://github.com/user/repo" {
 		t.Fatalf("got untrack args %+v", repo.untrackArgs)
 	}
 
-	if addChatErr := svc.AddChat(2); addChatErr != nil {
+	if addChatErr := svc.AddChat(ctx, 2); addChatErr != nil {
 		t.Fatalf("unexpected add chat error: %v", addChatErr)
 	}
-	if deleteChatErr := svc.DeleteChat(2); deleteChatErr != nil {
+	if deleteChatErr := svc.DeleteChat(ctx, 2); deleteChatErr != nil {
 		t.Fatalf("unexpected delete chat error: %v", deleteChatErr)
 	}
 }
 
 func TestScrapperErrors(t *testing.T) {
 	service := NewScrapper(noopLogger{}, &stubRepo{present: map[int64]bool{}}, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{})
-
-	if err := service.AddLink(models.AddLink{ChatID: 1}); !errors.Is(err, ports.ErrChatNotFound) {
+	ctx := context.Background()
+	if err := service.AddLink(ctx, models.AddLink{ChatID: 1}); !errors.Is(err, ports.ErrChatNotFound) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
 	}
-	if err := service.DeleteLink(models.DeleteLink{ChatID: 1}); !errors.Is(err, ports.ErrChatNotFound) {
+	if err := service.DeleteLink(ctx, models.DeleteLink{ChatID: 1}); !errors.Is(err, ports.ErrChatNotFound) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
 	}
-	if _, err := service.GetLinks(1, nil); !errors.Is(err, ports.ErrChatNotFound) {
+	if _, err := service.GetLinks(ctx, 1, nil); !errors.Is(err, ports.ErrChatNotFound) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
 	}
 
 	repo := &stubRepo{present: map[int64]bool{1: true}, trackOK: false, untrackOK: false, addChatOK: false, deleteOK: false}
 	service = NewScrapper(noopLogger{}, repo, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{})
-	if err := service.AddLink(models.AddLink{ChatID: 1}); !errors.Is(err, ports.ErrLinkAlreadyExists) {
+	if err := service.AddLink(ctx, models.AddLink{ChatID: 1}); !errors.Is(err, ports.ErrLinkAlreadyExists) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrLinkAlreadyExists)
 	}
-	if err := service.DeleteLink(models.DeleteLink{ChatID: 1}); !errors.Is(err, ports.ErrLinkNotFound) {
+	if err := service.DeleteLink(ctx, models.DeleteLink{ChatID: 1}); !errors.Is(err, ports.ErrLinkNotFound) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrLinkNotFound)
 	}
-	if err := service.AddChat(1); !errors.Is(err, ports.ErrChatAlreadyExists) {
+	if err := service.AddChat(ctx, 1); !errors.Is(err, ports.ErrChatAlreadyExists) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrChatAlreadyExists)
 	}
-	if err := service.DeleteChat(1); !errors.Is(err, ports.ErrChatNotFound) {
+	if err := service.DeleteChat(ctx, 1); !errors.Is(err, ports.ErrChatNotFound) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
 	}
 }
@@ -212,10 +213,10 @@ func TestGetResourceUpdate(t *testing.T) {
 		{name: "stackoverflow update", github: &stubGithub{parseErr: errors.New("nope")}, stackoverflow: &stubStackOverflow{questionID: "123", update: ports.ResourceUpdate{LastUpdate: updatedAt}}, wantDesc: "Обнаружено обновление вопроса StackOverflow."},
 		{name: "unsupported link", github: &stubGithub{parseErr: errors.New("nope")}, stackoverflow: &stubStackOverflow{parseErr: errors.New("nope")}, wantErr: ports.ErrLinkNotFound},
 	}
-
+	ctx := context.Background()
 	for _, tt := range tests {
 		svc := NewScrapper(noopLogger{}, &stubRepo{}, &stubBotClient{}, tt.github, tt.stackoverflow)
-		update, desc, err := svc.getResourceUpdate("https://example.com")
+		update, desc, err := svc.getResourceUpdate(ctx, "https://example.com")
 		if tt.wantErr != nil {
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("case %q: got err %v, want %v", tt.name, err, tt.wantErr)
@@ -245,7 +246,7 @@ func TestCheckLinks(t *testing.T) {
 	stack := &stubStackOverflow{parseErr: errors.New("nope")}
 	svc := NewScrapper(noopLogger{}, repo, botClient, github, stack)
 
-	svc.CheckLinks()
+	svc.CheckLinks(context.Background())
 
 	if !reflect.DeepEqual(botClient.got.chatIDs, []int64{1}) {
 		t.Fatalf("got chat ids %v", botClient.got.chatIDs)
@@ -270,7 +271,7 @@ func TestCheckLinksSkipsWhenNothingChanged(t *testing.T) {
 	github := &stubGithub{owner: "user", repo: "repo", update: ports.ResourceUpdate{LastUpdate: current}}
 	svc := NewScrapper(noopLogger{}, repo, botClient, github, &stubStackOverflow{parseErr: errors.New("nope")})
 
-	svc.CheckLinks()
+	svc.CheckLinks(context.Background())
 
 	if botClient.got.url != "" {
 		t.Fatalf("expected no notification, got %+v", botClient.got)

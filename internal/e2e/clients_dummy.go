@@ -1,6 +1,7 @@
-package sourcedummy
+package e2e
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -17,7 +18,7 @@ func NewGitHubClient() *GitHubClient {
 	return &GitHubClient{parser: githubclient.NewGitHubClient()}
 }
 
-func (c *GitHubClient) GetRepoUpdate(_, _ string) (ports.ResourceUpdate, error) {
+func (c *GitHubClient) GetRepoUpdate(_ context.Context, _, _ string) (ports.ResourceUpdate, error) {
 	return ports.ResourceUpdate{LastUpdate: time.Now().UTC().Add(time.Second)}, nil
 }
 
@@ -37,7 +38,7 @@ func NewStackOverflowClient() *StackOverflowClient {
 	return &StackOverflowClient{parser: stackoverflowclient.NewStackOverflowClient()}
 }
 
-func (c *StackOverflowClient) GetQuestionUpdate(_ string) (ports.ResourceUpdate, error) {
+func (c *StackOverflowClient) GetQuestionUpdate(_ context.Context, _ string) (ports.ResourceUpdate, error) {
 	return ports.ResourceUpdate{LastUpdate: time.Now().UTC().Add(time.Second)}, nil
 }
 

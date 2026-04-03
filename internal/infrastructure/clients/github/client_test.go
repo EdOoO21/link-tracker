@@ -1,11 +1,16 @@
 package github
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+)
+
+const (
+	RequestTimeout = 5 * time.Second
 )
 
 func TestGetRepoUpdate(t *testing.T) {
@@ -27,8 +32,10 @@ func TestGetRepoUpdate(t *testing.T) {
 	client := NewGitHubClient()
 	client.baseURL = server.URL
 	client.client = server.Client()
+	reqCtx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
 
-	update, err := client.GetRepoUpdate("user", "repo")
+	update, err := client.GetRepoUpdate(reqCtx, "user", "repo")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,8 +53,9 @@ func TestGetRepoUpdateErrors(t *testing.T) {
 	client := NewGitHubClient()
 	client.baseURL = server.URL
 	client.client = server.Client()
-
-	if _, err := client.GetRepoUpdate("user", "repo"); err == nil || !strings.Contains(err.Error(), "unexpected status") {
+	reqCtx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
+	if _, err := client.GetRepoUpdate(reqCtx, "user", "repo"); err == nil || !strings.Contains(err.Error(), "unexpected status") {
 		t.Fatalf("got err %v", err)
 	}
 }

@@ -1,15 +1,17 @@
 package scrapperinterfaces
 
 import (
+	"context"
+
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/models"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
 type ScrapperService interface {
-	AddLink(link models.AddLink) error
-	GetLinks(chatID int64, tags []string) ([]domain.Link, error)
-	DeleteLink(link models.DeleteLink) error
+	AddLink(ctx context.Context, link models.AddLink) error
+	GetLinks(ctx context.Context, chatID int64, tags []string) ([]domain.Link, error)
+	DeleteLink(ctx context.Context, link models.DeleteLink) error
 
-	AddChat(chatID int64) error
-	DeleteChat(chatID int64) error
+	AddChat(ctx context.Context, chatID int64) error
+	DeleteChat(ctx context.Context, chatID int64) error
 }

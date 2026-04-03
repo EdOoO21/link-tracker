@@ -23,7 +23,7 @@ type mockBotService struct {
 	err        error
 }
 
-func (m *mockBotService) SendUpdateMessages(updates serviceModels.SendUpdates) error {
+func (m *mockBotService) SendUpdateMessages(_ context.Context, updates serviceModels.SendUpdates) error {
 	m.gotUpdates = updates
 	return m.err
 }

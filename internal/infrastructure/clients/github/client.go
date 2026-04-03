@@ -30,10 +30,10 @@ func NewGitHubClient() *Client {
 	}
 }
 
-func (c *Client) GetRepoUpdate(owner, repo string) (ports.ResourceUpdate, error) {
+func (c *Client) GetRepoUpdate(ctx context.Context, owner, repo string) (ports.ResourceUpdate, error) {
 	endpoint := c.baseURL + "/repos/" + owner + "/" + repo
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return ports.ResourceUpdate{}, fmt.Errorf("create request: %w", err)
 	}

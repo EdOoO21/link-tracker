@@ -29,45 +29,45 @@ func NewScrapperServiceServer(logger ports.Logger, scrapperService scrapperinter
 	}
 }
 
-func (s *ServiceServer) AddChat(_ context.Context, req *pb.ChatRequest) (*empty.Empty, error) {
-	if err := s.scrapperService.AddChat(req.GetChatId()); err != nil {
+func (s *ServiceServer) AddChat(ctx context.Context, req *pb.ChatRequest) (*empty.Empty, error) {
+	if err := s.scrapperService.AddChat(ctx, req.GetChatId()); err != nil {
 		return nil, toStatusError(err)
 	}
 	return &empty.Empty{}, nil
 }
 
-func (s *ServiceServer) DeleteChat(_ context.Context, req *pb.ChatRequest) (*empty.Empty, error) {
-	if err := s.scrapperService.DeleteChat(req.GetChatId()); err != nil {
+func (s *ServiceServer) DeleteChat(ctx context.Context, req *pb.ChatRequest) (*empty.Empty, error) {
+	if err := s.scrapperService.DeleteChat(ctx, req.GetChatId()); err != nil {
 		return nil, toStatusError(err)
 	}
 	return &empty.Empty{}, nil
 }
 
-func (s *ServiceServer) AddLink(_ context.Context, req *pb.AddLinkRequest) (*empty.Empty, error) {
+func (s *ServiceServer) AddLink(ctx context.Context, req *pb.AddLinkRequest) (*empty.Empty, error) {
 	link := models.AddLink{
 		ChatID: req.GetChatId(),
 		URL:    req.GetUrl(),
 		Tags:   req.GetTags(),
 	}
-	if err := s.scrapperService.AddLink(link); err != nil {
+	if err := s.scrapperService.AddLink(ctx, link); err != nil {
 		return nil, toStatusError(err)
 	}
 	return &empty.Empty{}, nil
 }
 
-func (s *ServiceServer) DeleteLink(_ context.Context, req *pb.DeleteLinkRequest) (*empty.Empty, error) {
+func (s *ServiceServer) DeleteLink(ctx context.Context, req *pb.DeleteLinkRequest) (*empty.Empty, error) {
 	link := models.DeleteLink{
 		ChatID: req.GetChatId(),
 		URL:    req.GetUrl(),
 	}
-	if err := s.scrapperService.DeleteLink(link); err != nil {
+	if err := s.scrapperService.DeleteLink(ctx, link); err != nil {
 		return nil, toStatusError(err)
 	}
 	return &empty.Empty{}, nil
 }
 
-func (s *ServiceServer) ListLinks(_ context.Context, req *pb.ListLinksRequest) (*pb.ListLinksResponse, error) {
-	links, err := s.scrapperService.GetLinks(req.GetChatId(), req.GetTags())
+func (s *ServiceServer) ListLinks(ctx context.Context, req *pb.ListLinksRequest) (*pb.ListLinksResponse, error) {
+	links, err := s.scrapperService.GetLinks(ctx, req.GetChatId(), req.GetTags())
 	if err != nil {
 		return nil, toStatusError(err)
 	}
@@ -83,7 +83,7 @@ func (s *ServiceServer) ListLinks(_ context.Context, req *pb.ListLinksRequest) (
 	return resp, nil
 }
 
-//nolint:wrapcheck // gRPC handlers must return raw status errors to preserve status codes.
+//nolint:wrapcheck // gRPC handlers must return raw status errors to preserve status codes
 func toStatusError(err error) error {
 	switch {
 	case errors.Is(err, ports.ErrChatNotFound):

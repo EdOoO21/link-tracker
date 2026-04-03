@@ -30,10 +30,10 @@ func NewStackOverflowClient() *Client {
 	}
 }
 
-func (c *Client) GetQuestionUpdate(questionID string) (ports.ResourceUpdate, error) {
+func (c *Client) GetQuestionUpdate(ctx context.Context, questionID string) (ports.ResourceUpdate, error) {
 	endpoint := c.baseURL + "/questions/" + questionID + "?site=stackoverflow"
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return ports.ResourceUpdate{}, fmt.Errorf("create request: %w", err)
 	}

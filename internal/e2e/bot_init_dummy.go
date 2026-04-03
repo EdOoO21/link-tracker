@@ -1,4 +1,4 @@
-package botinit
+package e2e
 
 import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"

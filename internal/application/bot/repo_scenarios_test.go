@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -34,33 +35,33 @@ type mockRepo struct {
 	linkExists bool
 }
 
-func (m *mockRepo) TrackLink(chatID int64, url string, tags []string) error {
+func (m *mockRepo) TrackLink(_ context.Context, chatID int64, url string, tags []string) error {
 	m.trackLinkArgs.chatID = chatID
 	m.trackLinkArgs.url = url
 	m.trackLinkArgs.tags = tags
 	return m.trackErr
 }
 
-func (m *mockRepo) UnTrackLink(chatID int64, url string) error {
+func (m *mockRepo) UnTrackLink(_ context.Context, chatID int64, url string) error {
 	m.untrackArgs.chatID = chatID
 	m.untrackArgs.url = url
 	return m.untrackErr
 }
 
-func (m *mockRepo) ListLinks(chatID int64, tags []string) ([]domain.Link, error) {
+func (m *mockRepo) ListLinks(_ context.Context, chatID int64, tags []string) ([]domain.Link, error) {
 	m.listArgs.chatID = chatID
 	m.listArgs.tags = tags
 	return m.listResp, m.listErr
 }
 
-func (m *mockRepo) AddChat(chatID int64) error {
+func (m *mockRepo) AddChat(_ context.Context, chatID int64) error {
 	m.addChatID = chatID
 	return m.addChatErr
 }
 
-func (m *mockRepo) DeleteChat(_ int64) error { return nil }
+func (m *mockRepo) DeleteChat(_ context.Context, _ int64) error { return nil }
 
-func (m *mockRepo) IsLinkPresent(_ int64, _ string) bool {
+func (m *mockRepo) IsLinkPresent(_ context.Context, _ int64, _ string) bool {
 	return m.linkExists
 }
 
@@ -97,7 +98,7 @@ func TestComputeStart(t *testing.T) {
 	for _, tt := range tests {
 		repo := &mockRepo{addChatErr: tt.addErr}
 		app := &App{repo: repo, stMachine: StateMachine{10: {State: LinkGot, URL: "https://github.com/user/repo"}}}
-		msg := app.computeStart(10)
+		msg := app.computeStart(context.Background(), 10)
 		if msg.Text != tt.wantText {
 			t.Fatalf("case %q: got text %q, want %q", tt.name, msg.Text, tt.wantText)
 		}
@@ -130,7 +131,7 @@ func TestComputeList(t *testing.T) {
 		repo := &mockRepo{listResp: tt.listResp, listErr: tt.listErr}
 		app := &App{repo: repo, stMachine: StateMachine{chatID: {State: TrackCommandGot}}}
 		update := commandUpdate(chatID, "/list", tt.args)
-		msg := app.computeList(update)
+		msg := app.computeList(context.Background(), update)
 
 		if msg.Text != tt.wantText {
 			t.Fatalf("case %q: got text %q, want %q", tt.name, msg.Text, tt.wantText)
@@ -166,7 +167,7 @@ func TestComputeUnTrack(t *testing.T) {
 		repo := &mockRepo{untrackErr: tt.untrackErr}
 		app := &App{repo: repo, stMachine: StateMachine{chatID: {State: LinkGot}}}
 		update := commandUpdate(chatID, "/untrack", tt.args)
-		msg := app.computeUnTrack(update)
+		msg := app.computeUnTrack(context.Background(), update)
 
 		if msg.Text != tt.wantText {
 			t.Fatalf("case %q: got text %q, want %q", tt.name, msg.Text, tt.wantText)
@@ -198,7 +199,7 @@ func TestComputeGotTags(t *testing.T) {
 	for _, tt := range tests {
 		repo := &mockRepo{trackErr: tt.trackErr}
 		app := &App{repo: repo, stMachine: StateMachine{chatID: {State: LinkGot, URL: "https://github.com/user/repo"}}}
-		msg, command := app.computeGotTags(chatID, "go, backend")
+		msg, command := app.computeGotTags(context.Background(), chatID, "go, backend")
 
 		if msg.Text != tt.wantText {
 			t.Fatalf("case %q: got text %q, want %q", tt.name, msg.Text, tt.wantText)
@@ -223,7 +224,7 @@ func TestComputeGotTagsWithoutTags(t *testing.T) {
 	repo := &mockRepo{}
 	app := &App{repo: repo, stMachine: StateMachine{chatID: {State: LinkGot, URL: "https://github.com/user/repo"}}}
 
-	msg, command := app.computeGotTags(chatID, "-")
+	msg, command := app.computeGotTags(context.Background(), chatID, "-")
 
 	if msg.Text != TrackNotExistedURL {
 		t.Fatalf("got text %q, want %q", msg.Text, TrackNotExistedURL)

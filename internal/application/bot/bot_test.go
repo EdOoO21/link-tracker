@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -30,7 +31,7 @@ func TestComputeGotLink(t *testing.T) {
 			repo:      &mockRepo{linkExists: tt.linkExists},
 			stMachine: StateMachine{chatID: {State: TrackCommandGot}},
 		}
-		msg, command := app.computeGotLink(chatID, tt.input)
+		msg, command := app.computeGotLink(context.Background(), chatID, tt.input)
 
 		if msg.Text != tt.wantText {
 			t.Fatalf("case %q: got text %q, want %q", tt.name, msg.Text, tt.wantText)
@@ -143,7 +144,7 @@ func TestComputeTextWithoutStateReturnsUnknownText(t *testing.T) {
 	chatID := int64(11)
 	app := &App{stMachine: make(StateMachine)}
 
-	msg, command := app.computeText(chatID, "hello")
+	msg, command := app.computeText(context.Background(), chatID, "hello")
 	if msg.Text != UnknownText {
 		t.Fatalf("got text %q, want %q", msg.Text, UnknownText)
 	}

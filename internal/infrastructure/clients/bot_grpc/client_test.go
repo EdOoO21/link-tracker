@@ -34,7 +34,7 @@ func TestGRPCClientSendUpdates(t *testing.T) {
 	mockClient := &mockBotServiceClient{}
 	client := &GRPCClient{client: mockClient, logger: noopLogger{}}
 
-	err := client.SendUpdates([]int64{1, 2}, "https://github.com/user/repo", "updated")
+	err := client.SendUpdates(context.Background(), []int64{1, 2}, "https://github.com/user/repo", "updated")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestGRPCClientSendUpdatesReturnsWrappedError(t *testing.T) {
 	mockClient := &mockBotServiceClient{err: errors.New("boom")}
 	client := &GRPCClient{client: mockClient, logger: noopLogger{}}
 
-	err := client.SendUpdates([]int64{1}, "url", "desc")
+	err := client.SendUpdates(context.Background(), []int64{1}, "url", "desc")
 	if err == nil {
 		t.Fatal("expected error")
 	}

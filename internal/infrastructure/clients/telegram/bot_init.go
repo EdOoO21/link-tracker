@@ -20,15 +20,15 @@ func NewTGBot(logger logger.Logger, cfg *settings.Config) (*BotInit, error) {
 		logger.Error("bot initialization failed", "error", err)
 		return nil, fmt.Errorf("create bot: %w", err)
 	}
-	logger.Error("bot successfully initialized")
+	logger.Info("bot successfully initialized")
 
-	logger.Error("commands list initialization started")
+	logger.Info("commands list initialization started")
 	_, err = bot.Request(tgbotapi.NewSetMyCommands(cfg.Commands...))
 	if err != nil {
 		logger.Error("commands list initialization failed", "error", err)
 		return nil, fmt.Errorf("request command list: %w", err)
 	}
-	logger.Error("commands list successfully initialized")
+	logger.Info("commands list successfully initialized")
 
 	return &BotInit{bot: bot, logger: logger}, nil
 }
