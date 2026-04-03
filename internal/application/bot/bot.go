@@ -1,7 +1,9 @@
 package bot
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -50,7 +52,7 @@ const (
 	LinksListFailed           = "Произошла непредвиденная при поиске всех отслеживаемых ссылок.\nПопробуйте снова через некоторое время."
 	CancelCommand             = "Добавление ссылки к отслеживанию прервано."
 	CancelCommandNothingGot   = "Нечего отменять: процесс добавления ссылки не был запущен или был прерван ранее другой командой. Используйте /help для описания команд."
-	ChatIDNotFound            = "Вам не предоставлена возможность отслеживать источники.\n Попробуйте /start."
+	ChatIDNotFound            = "Вам не предоставлена возможность отслеживать источники.\nПопробуйте /start."
 	UnknownText               = "Неопознанный текст. Воспользуйтесь /help для списка доступных команд."
 	InvalidURL                = "Невалидная ссылка, пожалуйста, попробуйте снова."
 	ValidURL                  = `Ссылка успешно принята, далее отправьте теги в формате "тег, тег, тег..." или "-" если без тегов`
@@ -79,10 +81,13 @@ func NewApp(logger ports.Logger, config *settings.Config, repo inf.Repository, b
 	}
 }
 
-func (a *App) SendUpdateMessages(updates models.SendUpdates) error {
+func (a *App) SendUpdateMessages(ctx context.Context, updates models.SendUpdates) error {
 	failed := false
 	for _, chatID := range updates.ChatIDs {
 		msg := tgbotapi.NewMessage(chatID, linkUpdated(updates.URL, updates.Description))
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("send updates to user: %w", err)
+		}
 		_, err := a.bot.Send(msg)
 		if err != nil {
 			failed = true
@@ -96,53 +101,68 @@ func (a *App) SendUpdateMessages(updates models.SendUpdates) error {
 	return nil
 }
 
-func (a *App) Run() error {
+func (a *App) Run(ctx context.Context) error {
 	u := tgbotapi.NewUpdate(a.config.Offset)
 	u.Timeout = a.config.Timeout
 	updates := a.bot.GetUpdatesChan(u)
 	a.logger.Info("got channel for updates")
-	for update := range updates {
-		if update.Message == nil {
-			continue
-		}
-		var msg tgbotapi.MessageConfig
-		var command string
-		chatID := update.Message.Chat.ID
-		a.logger.Info("recieved update", "chatID", chatID)
-		if !update.Message.IsCommand() {
-			a.logger.Info("recieved text", "chatID", chatID)
-			msg, command = a.computeText(chatID, update.Message.Text)
-		} else {
-			command = update.Message.Command()
-			msg, command = a.moderateCommand(command, update)
-			a.logger.Info("recieved command", "chatID", chatID, "command", command)
-		}
-		_, err := a.bot.Send(msg)
-		if err != nil {
-			a.logger.Error("error to send message", "error", err, "chatID", chatID, "command", command)
-		}
-		a.logger.Info("reply sent", "chatID", chatID, "command", command)
+	err := a.longPolling(ctx, updates)
+	if err != nil {
+		return fmt.Errorf("running bot: %w", err)
 	}
 	return nil
 }
 
-func (a *App) computeText(chatID int64, text string) (tgbotapi.MessageConfig, string) {
+func (a *App) longPolling(ctx context.Context, updates tgbotapi.UpdatesChannel) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("bot long polling: %w", ctx.Err())
+		case update, ok := <-updates:
+			if !ok {
+				return nil
+			}
+			if update.Message == nil {
+				continue
+			}
+			var msg tgbotapi.MessageConfig
+			var command string
+			chatID := update.Message.Chat.ID
+			a.logger.Info("recieved update", "chatID", chatID)
+			if !update.Message.IsCommand() {
+				a.logger.Info("recieved text", "chatID", chatID)
+				msg, command = a.computeText(ctx, chatID, update.Message.Text)
+			} else {
+				command = update.Message.Command()
+				msg, command = a.moderateCommand(ctx, command, update)
+				a.logger.Info("recieved command", "chatID", chatID, "command", command)
+			}
+			_, err := a.bot.Send(msg)
+			if err != nil {
+				a.logger.Error("error to send message", "error", err, "chatID", chatID, "command", command)
+			}
+			a.logger.Info("reply sent", "chatID", chatID, "command", command)
+		}
+	}
+}
+
+func (a *App) computeText(ctx context.Context, chatID int64, text string) (tgbotapi.MessageConfig, string) {
 	var msg tgbotapi.MessageConfig
 	command := NotCommand
 	switch a.stMachine.State(chatID).State {
 	case NothingGot:
 		msg = tgbotapi.NewMessage(chatID, UnknownText)
 	case TrackCommandGot:
-		msg, command = a.computeGotLink(chatID, text)
+		msg, command = a.computeGotLink(ctx, chatID, text)
 	case LinkGot:
-		msg, command = a.computeGotTags(chatID, text)
+		msg, command = a.computeGotTags(ctx, chatID, text)
 	default:
 		msg = tgbotapi.NewMessage(chatID, UnknownText)
 	}
 	return msg, command
 }
 
-func (a *App) computeGotLink(chatID int64, text string) (tgbotapi.MessageConfig, string) {
+func (a *App) computeGotLink(ctx context.Context, chatID int64, text string) (tgbotapi.MessageConfig, string) {
 	u, err := url.ParseRequestURI(text)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return tgbotapi.NewMessage(chatID, InvalidURL), TextInvalidLinkGot
@@ -150,7 +170,7 @@ func (a *App) computeGotLink(chatID int64, text string) (tgbotapi.MessageConfig,
 	if u.Host != "github.com" && u.Host != "stackoverflow.com" {
 		return tgbotapi.NewMessage(chatID, NotSupportedURL), TextNotSupportedLinkGot
 	}
-	if a.repo.IsLinkPresent(chatID, u.String()) {
+	if a.repo.IsLinkPresent(ctx, chatID, u.String()) {
 		return tgbotapi.NewMessage(chatID, TrackExistedURLNoReset), URLExists
 	}
 	a.stMachine.State(chatID).URL = u.String()
@@ -159,7 +179,7 @@ func (a *App) computeGotLink(chatID int64, text string) (tgbotapi.MessageConfig,
 	return tgbotapi.NewMessage(chatID, ValidURL), TextValidLinkGot
 }
 
-func (a *App) computeGotTags(chatID int64, text string) (tgbotapi.MessageConfig, string) {
+func (a *App) computeGotTags(ctx context.Context, chatID int64, text string) (tgbotapi.MessageConfig, string) {
 	var msg tgbotapi.MessageConfig
 	var command string
 	if strings.TrimSpace(text) == "-" {
@@ -173,7 +193,7 @@ func (a *App) computeGotTags(chatID int64, text string) (tgbotapi.MessageConfig,
 			tags = append(tags, tag)
 		}
 	}
-	switch err := a.repo.TrackLink(chatID, a.stMachine.State(chatID).URL, tags); {
+	switch err := a.repo.TrackLink(ctx, chatID, a.stMachine.State(chatID).URL, tags); {
 	case errors.Is(err, ports.ErrLinkAlreadyExists):
 		msg = tgbotapi.NewMessage(chatID, TrackExistedURLWithReset)
 		command = URLExists
@@ -193,20 +213,20 @@ func (a *App) computeGotTags(chatID int64, text string) (tgbotapi.MessageConfig,
 	return msg, command
 }
 
-func (a *App) moderateCommand(command string, update tgbotapi.Update) (tgbotapi.MessageConfig, string) {
+func (a *App) moderateCommand(ctx context.Context, command string, update tgbotapi.Update) (tgbotapi.MessageConfig, string) {
 	chatID := update.Message.Chat.ID
 	var msg tgbotapi.MessageConfig
 	switch command {
 	case "help":
 		msg = a.computeHelp(chatID)
 	case "start":
-		msg = a.computeStart(chatID)
+		msg = a.computeStart(ctx, chatID)
 	case "track":
 		msg = a.computeTrack(update)
 	case "untrack":
-		msg = a.computeUnTrack(update)
+		msg = a.computeUnTrack(ctx, update)
 	case "list":
-		msg = a.computeList(update)
+		msg = a.computeList(ctx, update)
 	case "cancel":
 		msg = a.computeCancel(chatID)
 	default:
@@ -222,12 +242,12 @@ func (a *App) computeHelp(chatID int64) tgbotapi.MessageConfig {
 	return tgbotapi.NewMessage(chatID, HelpCommand)
 }
 
-func (a *App) computeStart(chatID int64) tgbotapi.MessageConfig {
+func (a *App) computeStart(ctx context.Context, chatID int64) tgbotapi.MessageConfig {
 	var msg tgbotapi.MessageConfig
 	if a.stMachine.HasActiveState(chatID) {
 		a.stMachine.Reset(chatID)
 	}
-	err := a.repo.AddChat(chatID)
+	err := a.repo.AddChat(ctx, chatID)
 	if err != nil && !errors.Is(err, ports.ErrChatAlreadyExists) {
 		msg = tgbotapi.NewMessage(chatID, StartCommandFailedChatAdd)
 	} else {
@@ -249,7 +269,7 @@ func (a *App) computeTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 	return msg
 }
 
-func (a *App) computeUnTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
+func (a *App) computeUnTrack(ctx context.Context, update tgbotapi.Update) tgbotapi.MessageConfig {
 	args := strings.Fields(update.Message.CommandArguments())
 	var msg tgbotapi.MessageConfig
 	var url string
@@ -264,7 +284,7 @@ func (a *App) computeUnTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 	}
 
 	if url != "" {
-		switch err := a.repo.UnTrackLink(chatID, url); {
+		switch err := a.repo.UnTrackLink(ctx, chatID, url); {
 		case errors.Is(err, ports.ErrLinkNotFound):
 			msg = tgbotapi.NewMessage(chatID, UntrackNotExistedURL)
 		case errors.Is(err, ports.ErrChatNotFound):
@@ -278,14 +298,14 @@ func (a *App) computeUnTrack(update tgbotapi.Update) tgbotapi.MessageConfig {
 	return msg
 }
 
-func (a *App) computeList(update tgbotapi.Update) tgbotapi.MessageConfig {
+func (a *App) computeList(ctx context.Context, update tgbotapi.Update) tgbotapi.MessageConfig {
 	tags := strings.Fields(update.Message.CommandArguments())
 	var msg tgbotapi.MessageConfig
 	chatID := update.Message.Chat.ID
 	if a.stMachine.HasActiveState(chatID) {
 		a.stMachine.Reset(chatID)
 	}
-	links, err := a.repo.ListLinks(chatID, tags)
+	links, err := a.repo.ListLinks(ctx, chatID, tags)
 	switch {
 	case errors.Is(err, ports.ErrChatNotFound):
 		msg = tgbotapi.NewMessage(chatID, ChatIDNotFound)

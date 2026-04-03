@@ -15,7 +15,7 @@ APP_DATABASE_ACCESS_TYPE=SQL
 7. set +a
 8. go run ./cmd/scrapper
 9. go run ./cmd/bot
-10.  интеграционный тест `RUN_TESTCONTAINERS=1 go test ./internal/integration -count=1 -v` - надо запустить docker daemon
-11. тесты без gen `go test $(go list ./... | grep -v '/proto/gen$' | grep -v '/cmd/') -count=1 -coverprofile=coverage.out`
+10.  интеграционный тест `RUN_TESTCONTAINERS=1 go test ./internal/e2e -count=1 -v` - надо запустить docker daemon
+11. тесты без gen `go test $(go list ./... | grep -v '/proto/gen$' | grep -v '/cmd/'| grep -v '/internal/e2e') -count=1 -coverprofile=coverage.out`
 12. cover `go tool cover -func=coverage.out`
 13. линтер `golangci-lint run -c .golangci.yml`

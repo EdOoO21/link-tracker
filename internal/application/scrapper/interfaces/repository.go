@@ -1,6 +1,7 @@
 package scrapperinterfaces
 
 import (
+	"context"
 	"time"
 
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
@@ -8,15 +9,15 @@ import (
 
 type Repository interface {
 	// returns false if url was in repository otherwise true
-	TrackLink(chatID int64, url string, tags []string) bool
+	TrackLink(ctx context.Context, chatID int64, url string, tags []string) bool
 	// returns true if url was in repository otherwise false
-	UnTrackLink(chatID int64, url string) bool
-	ListLinks(chatID int64, tags []string) []domain.Link
+	UnTrackLink(ctx context.Context, chatID int64, url string) bool
+	ListLinks(ctx context.Context, chatID int64, tags []string) []domain.Link
 
-	ListAllLinks() map[int64][]domain.Link
-	UpdateLinksLastUpdate(chatID int64, url string, lastUpdate time.Time) error
+	ListAllLinks(ctx context.Context) map[int64][]domain.Link
+	UpdateLinksLastUpdate(ctx context.Context, chatID int64, url string, lastUpdate time.Time) error
 
-	IsPresent(chatID int64) bool
-	AddChat(chatID int64) bool
-	DeleteChat(chatID int64) bool
+	IsPresent(ctx context.Context, chatID int64) bool
+	AddChat(ctx context.Context, chatID int64) bool
+	DeleteChat(ctx context.Context, chatID int64) bool
 }

@@ -25,8 +25,7 @@ func NewGRPCScrapperClient(logger ports.Logger, conn grpc.ClientConnInterface) *
 	}
 }
 
-func (c *Client) AddChat(chatID int64) error {
-	ctx := context.Background()
+func (c *Client) AddChat(ctx context.Context, chatID int64) error {
 	_, err := c.client.AddChat(ctx, &pc.ChatRequest{ChatId: chatID})
 	if err != nil {
 		return mapRPCError("add chat", err)
@@ -35,8 +34,7 @@ func (c *Client) AddChat(chatID int64) error {
 	return nil
 }
 
-func (c *Client) DeleteChat(chatID int64) error {
-	ctx := context.Background()
+func (c *Client) DeleteChat(ctx context.Context, chatID int64) error {
 	_, err := c.client.DeleteChat(ctx, &pc.ChatRequest{ChatId: chatID})
 	if err != nil {
 		return mapRPCError("delete chat", err)
@@ -45,8 +43,7 @@ func (c *Client) DeleteChat(chatID int64) error {
 	return nil
 }
 
-func (c *Client) TrackLink(chatID int64, url string, tags []string) error {
-	ctx := context.Background()
+func (c *Client) TrackLink(ctx context.Context, chatID int64, url string, tags []string) error {
 	_, err := c.client.AddLink(ctx, &pc.AddLinkRequest{ChatId: chatID, Url: url, Tags: tags})
 	if err != nil {
 		return mapRPCError("track link", err)
@@ -55,8 +52,7 @@ func (c *Client) TrackLink(chatID int64, url string, tags []string) error {
 	return nil
 }
 
-func (c *Client) UnTrackLink(chatID int64, url string) error {
-	ctx := context.Background()
+func (c *Client) UnTrackLink(ctx context.Context, chatID int64, url string) error {
 	_, err := c.client.DeleteLink(ctx, &pc.DeleteLinkRequest{ChatId: chatID, Url: url})
 	if err != nil {
 		return mapRPCError("untrack link", err)
@@ -65,8 +61,7 @@ func (c *Client) UnTrackLink(chatID int64, url string) error {
 	return nil
 }
 
-func (c *Client) ListLinks(chatID int64, tags []string) ([]domain.Link, error) {
-	ctx := context.Background()
+func (c *Client) ListLinks(ctx context.Context, chatID int64, tags []string) ([]domain.Link, error) {
 	resp, err := c.client.ListLinks(ctx, &pc.ListLinksRequest{ChatId: chatID, Tags: tags})
 	if err != nil {
 		return nil, mapRPCError("list links", err)
@@ -95,8 +90,8 @@ func (c *Client) ListLinks(chatID int64, tags []string) ([]domain.Link, error) {
 	return links, nil
 }
 
-func (c *Client) IsLinkPresent(chatID int64, link string) bool {
-	links, err := c.ListLinks(chatID, nil)
+func (c *Client) IsLinkPresent(ctx context.Context, chatID int64, link string) bool {
+	links, err := c.ListLinks(ctx, chatID, nil)
 	if err != nil {
 		c.logger.Warn("failed to check link presence", "chatID", chatID, "url", link, "error", err)
 		return false

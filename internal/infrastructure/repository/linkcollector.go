@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -19,7 +20,7 @@ func NewRepo() *UsersLinks {
 	}
 }
 
-func (u *UsersLinks) TrackLink(chatID int64, url string, tags []string) bool {
+func (u *UsersLinks) TrackLink(_ context.Context, chatID int64, url string, tags []string) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -44,7 +45,7 @@ func (u *UsersLinks) TrackLink(chatID int64, url string, tags []string) bool {
 	return true
 }
 
-func (u *UsersLinks) UnTrackLink(chatID int64, url string) bool {
+func (u *UsersLinks) UnTrackLink(_ context.Context, chatID int64, url string) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -60,7 +61,7 @@ func (u *UsersLinks) UnTrackLink(chatID int64, url string) bool {
 	return false
 }
 
-func (u *UsersLinks) ListLinks(chatID int64, tags []string) []domain.Link {
+func (u *UsersLinks) ListLinks(_ context.Context, chatID int64, tags []string) []domain.Link {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
@@ -86,7 +87,7 @@ func (u *UsersLinks) ListLinks(chatID int64, tags []string) []domain.Link {
 	return nil
 }
 
-func (u *UsersLinks) IsPresent(chatID int64) bool {
+func (u *UsersLinks) IsPresent(_ context.Context, chatID int64) bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
@@ -94,7 +95,7 @@ func (u *UsersLinks) IsPresent(chatID int64) bool {
 	return ok
 }
 
-func (u *UsersLinks) IsLinkPresent(chatID int64, url string) bool {
+func (u *UsersLinks) IsLinkPresent(_ context.Context, chatID int64, url string) bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
@@ -106,7 +107,7 @@ func (u *UsersLinks) IsLinkPresent(chatID int64, url string) bool {
 	return false
 }
 
-func (u *UsersLinks) AddChat(chatID int64) bool {
+func (u *UsersLinks) AddChat(_ context.Context, chatID int64) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -117,7 +118,7 @@ func (u *UsersLinks) AddChat(chatID int64) bool {
 	return false
 }
 
-func (u *UsersLinks) DeleteChat(chatID int64) bool {
+func (u *UsersLinks) DeleteChat(_ context.Context, chatID int64) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -128,7 +129,7 @@ func (u *UsersLinks) DeleteChat(chatID int64) bool {
 	return false
 }
 
-func (u *UsersLinks) ListAllLinks() map[int64][]domain.Link {
+func (u *UsersLinks) ListAllLinks(_ context.Context) map[int64][]domain.Link {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
@@ -141,7 +142,7 @@ func (u *UsersLinks) ListAllLinks() map[int64][]domain.Link {
 	return res
 }
 
-func (u *UsersLinks) UpdateLinksLastUpdate(chatID int64, url string, lastUpdate time.Time) error {
+func (u *UsersLinks) UpdateLinksLastUpdate(_ context.Context, chatID int64, url string, lastUpdate time.Time) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 

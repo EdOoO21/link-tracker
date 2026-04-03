@@ -1,5 +1,7 @@
 package scrapperinterfaces
 
+import "context"
+
 type BotClient interface {
-	SendUpdates(chatIDs []int64, url, description string) error
+	SendUpdates(ctx context.Context, chatIDs []int64, url, description string) error
 }

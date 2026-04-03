@@ -56,7 +56,7 @@ func TestGRPCScrapperClientTrackLink(t *testing.T) {
 	mockClient := &mockScrapperServiceClient{}
 	client := &Client{client: mockClient, logger: noopLogger{}}
 
-	err := client.TrackLink(7, "https://github.com/user/repo", []string{"go", "backend"})
+	err := client.TrackLink(context.Background(), 7, "https://github.com/user/repo", []string{"go", "backend"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestGRPCScrapperClientListLinks(t *testing.T) {
 	}
 	client := &Client{client: mockClient, logger: noopLogger{}}
 
-	links, err := client.ListLinks(5, []string{"go"})
+	links, err := client.ListLinks(context.Background(), 5, []string{"go"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

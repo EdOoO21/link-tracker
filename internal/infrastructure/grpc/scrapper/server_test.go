@@ -28,18 +28,18 @@ type mockScrapperService struct {
 	listLinksErr  error
 }
 
-func (m *mockScrapperService) AddLink(link models.AddLink) error {
+func (m *mockScrapperService) AddLink(_ context.Context, link models.AddLink) error {
 	m.gotAddLink = link
 	return m.addLinkErr
 }
 
-func (m *mockScrapperService) GetLinks(_ int64, _ []string) ([]domain.Link, error) {
+func (m *mockScrapperService) GetLinks(_ context.Context, _ int64, _ []string) ([]domain.Link, error) {
 	return m.listLinksResp, m.listLinksErr
 }
 
-func (m *mockScrapperService) DeleteLink(_ models.DeleteLink) error { return nil }
-func (m *mockScrapperService) AddChat(_ int64) error                { return nil }
-func (m *mockScrapperService) DeleteChat(_ int64) error             { return nil }
+func (m *mockScrapperService) DeleteLink(_ context.Context, _ models.DeleteLink) error { return nil }
+func (m *mockScrapperService) AddChat(_ context.Context, _ int64) error                { return nil }
+func (m *mockScrapperService) DeleteChat(_ context.Context, _ int64) error             { return nil }
 
 func TestScrapperServiceServerAddLink(t *testing.T) {
 	service := &mockScrapperService{}

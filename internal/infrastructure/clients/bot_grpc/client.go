@@ -21,13 +21,12 @@ func NewGRPCBotClient(logger logger.Logger, conn grpc.ClientConnInterface) *GRPC
 	}
 }
 
-func (b *GRPCClient) SendUpdates(chatIDs []int64, url, description string) error {
+func (b *GRPCClient) SendUpdates(ctx context.Context, chatIDs []int64, url, description string) error {
 	updates := &pc.SendUpdatesRequest{
 		Url:         url,
 		TgChatIds:   chatIDs,
 		Description: description,
 	}
-	ctx := context.Background()
 
 	if _, err := b.client.SendUpdates(ctx, updates); err != nil {
 		return fmt.Errorf("updates send: %w", err)

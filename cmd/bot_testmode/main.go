@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
 	app "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot"
 	botinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/interfaces"
+	botinit "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/e2e"
 	scrappergrpc "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/scrapper_grpc"
-	botinit "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/telegram"
 	grpcbot "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
 	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/bot"
@@ -20,13 +23,18 @@ import (
 
 func main() {
 	logger := logs.NewLogger()
-	if err := run(logger); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	err := run(ctx, stop, logger)
+
+	if err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *logs.Logger) error {
+func run(ctx context.Context, stop context.CancelFunc, logger *logs.Logger) error {
+	defer stop()
 	config, err := settings.LoadConfig()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -47,18 +55,17 @@ func run(logger *logs.Logger) error {
 	botService := app.NewApp(logger, config, scrapperClient, bot)
 
 	var listenerConfig net.ListenConfig
-	grpcListener, err := listenerConfig.Listen(context.Background(), "tcp", fmt.Sprintf(":%d", config.GRPCPort))
+	grpcListener, err := listenerConfig.Listen(ctx, "tcp", fmt.Sprintf(":%d", config.GRPCPort))
 	if err != nil {
 		return fmt.Errorf("listen grpc: %w", err)
 	}
-	defer func() {
-		if closeErr := grpcListener.Close(); closeErr != nil {
-			logger.Error("failed to close grpc listener", "error", closeErr)
-		}
-	}()
 
 	grpcSrv := grpc.NewServer()
-	defer grpcSrv.GracefulStop()
+	go func() {
+		<-ctx.Done()
+		logger.Info("stopping bot_dummy grpc server", "error", ctx.Err())
+		grpcSrv.GracefulStop()
+	}()
 
 	botGRPCServer := grpcbot.NewBotServiceServer(logger, botService)
 	pb.RegisterBotServiceServer(grpcSrv, botGRPCServer)
@@ -66,10 +73,11 @@ func run(logger *logs.Logger) error {
 	go func() {
 		if serveErr := grpcSrv.Serve(grpcListener); serveErr != nil {
 			logger.Error("grpc server died", "error", serveErr)
+			stop()
 		}
 	}()
 
-	if err = botService.Run(); err != nil {
+	if err = botService.Run(ctx); err != nil {
 		return fmt.Errorf("run bot service: %w", err)
 	}
 	return nil

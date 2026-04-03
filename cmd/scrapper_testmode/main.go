@@ -2,15 +2,18 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	scrapper "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper"
 	scrapperinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/interfaces"
+	sourcedummy "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/e2e"
 	botgrpc "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/bot_grpc"
-	sourcedummy "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/source_dummy"
 	grpcscrapper "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
 	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
 	repo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/repository"
@@ -22,13 +25,18 @@ import (
 
 func main() {
 	logger := logs.NewLogger()
-	if err := run(logger); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	err := run(ctx, logger)
+	stop()
+
+	if err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *logs.Logger) error {
+func run(ctx context.Context, logger *logs.Logger) error {
 	repository := repo.NewRepo()
 	cfg, err := settings.LoadConfig()
 	if err != nil {
@@ -52,23 +60,22 @@ func run(logger *logs.Logger) error {
 
 	scrapperService := scrapper.NewScrapper(logger, repository, botClient, githubUpdates, stackOverflowUpdates)
 	interval := loadCheckInterval(logger)
-	scrapperService.RunCron(interval)
+	scrapperService.RunCron(ctx, interval)
 	logger.Info("scrapper cron started", "interval", interval)
 
 	var listenerConfig net.ListenConfig
-	grpcListener, err := listenerConfig.Listen(context.Background(), "tcp", fmt.Sprintf(":%d", cfg.GRPCPort))
+	grpcListener, err := listenerConfig.Listen(ctx, "tcp", fmt.Sprintf(":%d", cfg.GRPCPort))
 	if err != nil {
 		return fmt.Errorf("listen grpc: %w", err)
 	}
 	logger.Info("scrapper grpc server starting", "port", cfg.GRPCPort)
-	defer func() {
-		if closeErr := grpcListener.Close(); closeErr != nil {
-			logger.Error("failed to close grpc listener", "error", closeErr)
-		}
-	}()
 
 	grpcSrv := grpc.NewServer()
-	defer grpcSrv.GracefulStop()
+	go func() {
+		<-ctx.Done()
+		logger.Info("stopping scrapper_dummy grpc server", "error", ctx.Err())
+		grpcSrv.GracefulStop()
+	}()
 
 	scrapperGRPCServer := grpcscrapper.NewScrapperServiceServer(logger, scrapperService)
 	pb.RegisterScrapperServiceServer(grpcSrv, scrapperGRPCServer)
