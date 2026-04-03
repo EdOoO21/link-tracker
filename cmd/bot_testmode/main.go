@@ -11,8 +11,8 @@ import (
 
 	app "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot"
 	botinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/interfaces"
+	botinit "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/e2e"
 	scrappergrpc "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/scrapper_grpc"
-	botinit "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/telegram"
 	grpcbot "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/bot"
 	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
 	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/bot"
@@ -40,10 +40,7 @@ func run(ctx context.Context, stop context.CancelFunc, logger *logs.Logger) erro
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	bot, err := botinit.NewTGBot(logger, config)
-	if err != nil {
-		return fmt.Errorf("init telegram bot: %w", err)
-	}
+	bot := botinit.NewDummyBot(logger)
 
 	scrapperClient, scrapperConn, err := newScrapperGRPCClient(logger, config.ScrapperURL.HostPort())
 	if err != nil {
@@ -66,7 +63,7 @@ func run(ctx context.Context, stop context.CancelFunc, logger *logs.Logger) erro
 	grpcSrv := grpc.NewServer()
 	go func() {
 		<-ctx.Done()
-		logger.Info("stopping bot grpc server", "error", ctx.Err())
+		logger.Info("stopping bot_dummy grpc server", "error", ctx.Err())
 		grpcSrv.GracefulStop()
 	}()
 

@@ -12,9 +12,8 @@ import (
 
 	scrapper "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper"
 	scrapperinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/interfaces"
+	sourcedummy "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/e2e"
 	botgrpc "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/bot_grpc"
-	github "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/github"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/stackoverflow"
 	grpcscrapper "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
 	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
 	repo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/repository"
@@ -43,11 +42,11 @@ func run(ctx context.Context, logger *logs.Logger) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	logger.Info("scrapper config loaded", "bot_addr", cfg.BotURL.HostPort(), "grpc_port", cfg.GRPCPort)
+	logger.Info("scrapper testmode config loaded", "bot_addr", cfg.BotURL.HostPort(), "grpc_port", cfg.GRPCPort)
 
-	githubClient := github.NewGitHubClient()
-	stackOverflowClient := stackoverflow.NewStackOverflowClient()
-	logger.Info("scrapper source clients initialized")
+	githubUpdates := sourcedummy.NewGitHubClient()
+	stackOverflowUpdates := sourcedummy.NewStackOverflowClient()
+	logger.Info("scrapper dummy source clients initialized")
 	botClient, botConn, err := newBotGRPCClient(logger, cfg.BotURL.HostPort())
 	if err != nil {
 		return fmt.Errorf("create bot grpc client: %w", err)
@@ -59,9 +58,10 @@ func run(ctx context.Context, logger *logs.Logger) error {
 		}
 	}()
 
-	scrapperService := scrapper.NewScrapper(logger, repository, botClient, githubClient, stackOverflowClient)
-	scrapperService.RunCron(ctx, 1*time.Minute)
-	logger.Info("scrapper cron started", "interval", time.Minute)
+	scrapperService := scrapper.NewScrapper(logger, repository, botClient, githubUpdates, stackOverflowUpdates)
+	interval := loadCheckInterval(logger)
+	scrapperService.RunCron(ctx, interval)
+	logger.Info("scrapper cron started", "interval", interval)
 
 	var listenerConfig net.ListenConfig
 	grpcListener, err := listenerConfig.Listen(ctx, "tcp", fmt.Sprintf(":%d", cfg.GRPCPort))
@@ -73,7 +73,7 @@ func run(ctx context.Context, logger *logs.Logger) error {
 	grpcSrv := grpc.NewServer()
 	go func() {
 		<-ctx.Done()
-		logger.Info("stopping scrapper grpc server", "error", ctx.Err())
+		logger.Info("stopping scrapper_dummy grpc server", "error", ctx.Err())
 		grpcSrv.GracefulStop()
 	}()
 
@@ -84,6 +84,20 @@ func run(ctx context.Context, logger *logs.Logger) error {
 		return fmt.Errorf("serve grpc: %w", serveErr)
 	}
 	return nil
+}
+
+func loadCheckInterval(logger *logs.Logger) time.Duration {
+	raw := os.Getenv("APP_SCRAPPER_CHECK_INTERVAL")
+	if raw == "" {
+		return time.Minute
+	}
+
+	duration, err := time.ParseDuration(raw)
+	if err != nil {
+		logger.Warn("invalid scrapper check interval, using default", "raw", raw, "error", err)
+		return time.Minute
+	}
+	return duration
 }
 
 func newBotGRPCClient(logger *logs.Logger, addr string) (scrapperinterfaces.BotClient, *grpc.ClientConn, error) {
