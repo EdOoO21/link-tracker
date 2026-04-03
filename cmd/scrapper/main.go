@@ -17,7 +17,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/stackoverflow"
 	grpcscrapper "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
 	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
-	repo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/repository"
+	postgresrepo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/postgres"
 	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/scrapper"
 	pb "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/proto/gen"
 	"google.golang.org/grpc"
@@ -38,12 +38,17 @@ func main() {
 }
 
 func run(ctx context.Context, logger *logs.Logger) error {
-	repository := repo.NewRepo()
 	cfg, err := settings.LoadConfig()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	logger.Info("scrapper config loaded", "bot_addr", cfg.BotURL.HostPort(), "grpc_port", cfg.GRPCPort)
+	logger.Info("scrapper config loaded", "bot_addr", cfg.BotURL.HostPort(), "grpc_port", cfg.GRPCPort, "access_type", cfg.DB.AccessType)
+
+	repository, err := postgresrepo.NewRepository(ctx, logger, cfg.DB)
+	if err != nil {
+		return fmt.Errorf("create postgres repository: %w", err)
+	}
+	defer repository.Close()
 
 	githubClient := github.NewGitHubClient()
 	stackOverflowClient := stackoverflow.NewStackOverflowClient()

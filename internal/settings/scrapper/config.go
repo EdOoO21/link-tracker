@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 )
 
 var (
@@ -15,7 +16,7 @@ var (
 	ErrDatabaseURLEmpty      = errors.New("database URL is empty")
 	ErrDatabaseUserEmpty     = errors.New("database user is empty")
 	ErrDatabasePasswordEmpty = errors.New("database password is empty")
-	ErrAccessTypeEmpty       = errors.New("access type is empty")
+	ErrAccessTypeInvalid     = errors.New("access type is empty/invalid")
 )
 
 type ServiceURL struct {
@@ -31,13 +32,17 @@ func (u ServiceURL) HostPort() string {
 	return parsed.Host
 }
 
-type Config struct {
-	BotURL           ServiceURL
-	GRPCPort         int
+type DBConfig struct {
 	DatabaseURL      string
 	DatabaseUser     string
 	DatabasePassword string
 	AccessType       string
+}
+
+type Config struct {
+	BotURL   ServiceURL
+	DB       DBConfig
+	GRPCPort int
 }
 
 func LoadConfig() (*Config, error) {
@@ -63,8 +68,9 @@ func LoadConfig() (*Config, error) {
 	if databasePassword == "" {
 		return nil, ErrDatabasePasswordEmpty
 	}
-	if accessType == "" {
-		return nil, ErrAccessTypeEmpty
+	accessTypeFormatted := strings.ToLower(strings.TrimSpace(accessType))
+	if accessTypeFormatted == "" || (accessTypeFormatted != "sql" && accessTypeFormatted != "orm") {
+		return nil, ErrAccessTypeInvalid
 	}
 
 	botURL, err := parseServiceURL(botRawURL, ErrBotURLInvalid)
@@ -77,12 +83,13 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		BotURL:           botURL,
-		GRPCPort:         scrapperURL.Port,
-		DatabaseURL:      databaseURL,
-		DatabaseUser:     databaseUser,
-		DatabasePassword: databasePassword,
-		AccessType:       accessType,
+		BotURL:   botURL,
+		GRPCPort: scrapperURL.Port,
+		DB: DBConfig{
+			DatabaseURL:      databaseURL,
+			DatabaseUser:     databaseUser,
+			DatabasePassword: databasePassword,
+			AccessType:       accessTypeFormatted},
 	}, nil
 }
 

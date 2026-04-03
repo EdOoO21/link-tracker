@@ -4,20 +4,19 @@ import (
 	"context"
 	"time"
 
+	models "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/models"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
 type Repository interface {
-	// returns false if url was in repository otherwise true
-	TrackLink(ctx context.Context, chatID int64, url string, tags []string) bool
-	// returns true if url was in repository otherwise false
-	UnTrackLink(ctx context.Context, chatID int64, url string) bool
-	ListLinks(ctx context.Context, chatID int64, tags []string) []domain.Link
+	TrackLink(ctx context.Context, chatID int64, url string, tags []string) error
+	UnTrackLink(ctx context.Context, chatID int64, url string) error
+	ListLinks(ctx context.Context, chatID int64, tags []string) ([]domain.Link, error)
 
-	ListAllLinks(ctx context.Context) map[int64][]domain.Link
-	UpdateLinksLastUpdate(ctx context.Context, chatID int64, url string, lastUpdate time.Time) error
+	ListAllLinks(ctx context.Context) ([]models.TrackedLink, error)
+	UpdateLinksLastUpdate(ctx context.Context, linkID int64, lastUpdate time.Time) error
 
-	IsPresent(ctx context.Context, chatID int64) bool
-	AddChat(ctx context.Context, chatID int64) bool
-	DeleteChat(ctx context.Context, chatID int64) bool
+	IsPresent(ctx context.Context, chatID int64) (bool, error)
+	AddChat(ctx context.Context, chatID int64) error
+	DeleteChat(ctx context.Context, chatID int64) error
 }

@@ -70,17 +70,17 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.GRPCPort != 9080 {
 		t.Fatalf("got grpc port %d", cfg.GRPCPort)
 	}
-	if cfg.DatabaseURL != "postgres://localhost:5432/linktracker" {
-		t.Fatalf("got database url %q", cfg.DatabaseURL)
+	if cfg.DB.DatabaseURL != "postgres://localhost:5432/linktracker" {
+		t.Fatalf("got database url %q", cfg.DB.DatabaseURL)
 	}
-	if cfg.DatabaseUser != "postgres" {
-		t.Fatalf("got database user %q", cfg.DatabaseUser)
+	if cfg.DB.DatabaseUser != "postgres" {
+		t.Fatalf("got database user %q", cfg.DB.DatabaseUser)
 	}
-	if cfg.DatabasePassword != "postgres" {
-		t.Fatalf("got database password %q", cfg.DatabasePassword)
+	if cfg.DB.DatabasePassword != "postgres" {
+		t.Fatalf("got database password %q", cfg.DB.DatabasePassword)
 	}
-	if cfg.AccessType != "sql" {
-		t.Fatalf("got access type %q", cfg.AccessType)
+	if cfg.DB.AccessType != "sql" {
+		t.Fatalf("got access type %q", cfg.DB.AccessType)
 	}
 }
 
