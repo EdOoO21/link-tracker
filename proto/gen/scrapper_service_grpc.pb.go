@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v3.12.4
-// source: proto/scrapper_service.proto
+// source: scrapper_service.proto
 
 package linktrackerv1
 
@@ -24,6 +24,9 @@ const (
 	ScrapperService_DeleteChat_FullMethodName = "/linktracker.v1.ScrapperService/DeleteChat"
 	ScrapperService_AddLink_FullMethodName    = "/linktracker.v1.ScrapperService/AddLink"
 	ScrapperService_DeleteLink_FullMethodName = "/linktracker.v1.ScrapperService/DeleteLink"
+	ScrapperService_AddTag_FullMethodName     = "/linktracker.v1.ScrapperService/AddTag"
+	ScrapperService_DeleteTag_FullMethodName  = "/linktracker.v1.ScrapperService/DeleteTag"
+	ScrapperService_GetTags_FullMethodName    = "/linktracker.v1.ScrapperService/GetTags"
 	ScrapperService_ListLinks_FullMethodName  = "/linktracker.v1.ScrapperService/ListLinks"
 )
 
@@ -35,6 +38,9 @@ type ScrapperServiceClient interface {
 	DeleteChat(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	AddLink(ctx context.Context, in *AddLinkRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	DeleteLink(ctx context.Context, in *DeleteLinkRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	AddTag(ctx context.Context, in *AddTagRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	DeleteTag(ctx context.Context, in *DeleteTagRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	GetTags(ctx context.Context, in *GetTagsRequest, opts ...grpc.CallOption) (*GetTagsResponse, error)
 	ListLinks(ctx context.Context, in *ListLinksRequest, opts ...grpc.CallOption) (*ListLinksResponse, error)
 }
 
@@ -86,6 +92,36 @@ func (c *scrapperServiceClient) DeleteLink(ctx context.Context, in *DeleteLinkRe
 	return out, nil
 }
 
+func (c *scrapperServiceClient) AddTag(ctx context.Context, in *AddTagRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, ScrapperService_AddTag_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *scrapperServiceClient) DeleteTag(ctx context.Context, in *DeleteTagRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, ScrapperService_DeleteTag_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *scrapperServiceClient) GetTags(ctx context.Context, in *GetTagsRequest, opts ...grpc.CallOption) (*GetTagsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTagsResponse)
+	err := c.cc.Invoke(ctx, ScrapperService_GetTags_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *scrapperServiceClient) ListLinks(ctx context.Context, in *ListLinksRequest, opts ...grpc.CallOption) (*ListLinksResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListLinksResponse)
@@ -104,6 +140,9 @@ type ScrapperServiceServer interface {
 	DeleteChat(context.Context, *ChatRequest) (*empty.Empty, error)
 	AddLink(context.Context, *AddLinkRequest) (*empty.Empty, error)
 	DeleteLink(context.Context, *DeleteLinkRequest) (*empty.Empty, error)
+	AddTag(context.Context, *AddTagRequest) (*empty.Empty, error)
+	DeleteTag(context.Context, *DeleteTagRequest) (*empty.Empty, error)
+	GetTags(context.Context, *GetTagsRequest) (*GetTagsResponse, error)
 	ListLinks(context.Context, *ListLinksRequest) (*ListLinksResponse, error)
 	mustEmbedUnimplementedScrapperServiceServer()
 }
@@ -126,6 +165,15 @@ func (UnimplementedScrapperServiceServer) AddLink(context.Context, *AddLinkReque
 }
 func (UnimplementedScrapperServiceServer) DeleteLink(context.Context, *DeleteLinkRequest) (*empty.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteLink not implemented")
+}
+func (UnimplementedScrapperServiceServer) AddTag(context.Context, *AddTagRequest) (*empty.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddTag not implemented")
+}
+func (UnimplementedScrapperServiceServer) DeleteTag(context.Context, *DeleteTagRequest) (*empty.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteTag not implemented")
+}
+func (UnimplementedScrapperServiceServer) GetTags(context.Context, *GetTagsRequest) (*GetTagsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTags not implemented")
 }
 func (UnimplementedScrapperServiceServer) ListLinks(context.Context, *ListLinksRequest) (*ListLinksResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListLinks not implemented")
@@ -223,6 +271,60 @@ func _ScrapperService_DeleteLink_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ScrapperService_AddTag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddTagRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ScrapperServiceServer).AddTag(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ScrapperService_AddTag_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ScrapperServiceServer).AddTag(ctx, req.(*AddTagRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ScrapperService_DeleteTag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteTagRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ScrapperServiceServer).DeleteTag(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ScrapperService_DeleteTag_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ScrapperServiceServer).DeleteTag(ctx, req.(*DeleteTagRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ScrapperService_GetTags_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTagsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ScrapperServiceServer).GetTags(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ScrapperService_GetTags_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ScrapperServiceServer).GetTags(ctx, req.(*GetTagsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ScrapperService_ListLinks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListLinksRequest)
 	if err := dec(in); err != nil {
@@ -265,10 +367,22 @@ var ScrapperService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ScrapperService_DeleteLink_Handler,
 		},
 		{
+			MethodName: "AddTag",
+			Handler:    _ScrapperService_AddTag_Handler,
+		},
+		{
+			MethodName: "DeleteTag",
+			Handler:    _ScrapperService_DeleteTag_Handler,
+		},
+		{
+			MethodName: "GetTags",
+			Handler:    _ScrapperService_GetTags_Handler,
+		},
+		{
 			MethodName: "ListLinks",
 			Handler:    _ScrapperService_ListLinks_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/scrapper_service.proto",
+	Metadata: "scrapper_service.proto",
 }

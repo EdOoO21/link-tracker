@@ -12,6 +12,9 @@ type Repository interface {
 	TrackLink(ctx context.Context, chatID int64, url string, tags []string) error
 	UnTrackLink(ctx context.Context, chatID int64, url string) error
 	ListLinks(ctx context.Context, chatID int64, tags []string) ([]domain.Link, error)
+	AddTag(ctx context.Context, chatID int64, url, tag string) error
+	DeleteTag(ctx context.Context, chatID int64, url, tag string) error
+	GetTags(ctx context.Context, chatID int64, url string) ([]string, error)
 
 	ListAllLinks(ctx context.Context) ([]models.TrackedLink, error)
 	UpdateLinksLastUpdate(ctx context.Context, linkID int64, lastUpdate time.Time) error

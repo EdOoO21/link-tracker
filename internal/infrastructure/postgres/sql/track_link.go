@@ -23,7 +23,7 @@ func (r *Repository) TrackLink(ctx context.Context, chatID int64, url string, ta
 
 	present, err := isPresent(ctx, tx, chatID)
 	if err != nil {
-		return fmt.Errorf("check chat presence: %w", err)
+		return fmt.Errorf("check chat existance: %w", err)
 	}
 	if !present {
 		return ports.ErrChatNotFound

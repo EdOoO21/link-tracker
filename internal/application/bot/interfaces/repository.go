@@ -11,6 +11,11 @@ type Repository interface {
 	TrackLink(ctx context.Context, chatID int64, url string, tags []string) error
 	// returns ports.ErrLinkNotFound if link exits, otherwise nil or other error
 	UnTrackLink(ctx context.Context, chatID int64, url string) error
+	// returns ports.ErrTagAlreadyExists if tag exists for link, otherwise nil or other error
+	AddTag(ctx context.Context, chatID int64, url, tag string) error
+	// returns ports.ErrTagNotFound if tag absent for link, otherwise nil or other error
+	DeleteTag(ctx context.Context, chatID int64, url, tag string) error
+	GetTags(ctx context.Context, chatID int64, url string) ([]string, error)
 
 	ListLinks(ctx context.Context, chatID int64, tags []string) ([]domain.Link, error)
 

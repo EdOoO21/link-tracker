@@ -2,18 +2,17 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.12.4
-// source: proto/bot_service.proto
+// source: bot_service.proto
 
 package linktrackerv1
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	empty "github.com/golang/protobuf/ptypes/empty"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -34,7 +33,7 @@ type SendUpdatesRequest struct {
 
 func (x *SendUpdatesRequest) Reset() {
 	*x = SendUpdatesRequest{}
-	mi := &file_proto_bot_service_proto_msgTypes[0]
+	mi := &file_bot_service_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +45,7 @@ func (x *SendUpdatesRequest) String() string {
 func (*SendUpdatesRequest) ProtoMessage() {}
 
 func (x *SendUpdatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_bot_service_proto_msgTypes[0]
+	mi := &file_bot_service_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +58,7 @@ func (x *SendUpdatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendUpdatesRequest.ProtoReflect.Descriptor instead.
 func (*SendUpdatesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_bot_service_proto_rawDescGZIP(), []int{0}
+	return file_bot_service_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *SendUpdatesRequest) GetUrl() string {
@@ -83,11 +82,11 @@ func (x *SendUpdatesRequest) GetDescription() string {
 	return ""
 }
 
-var File_proto_bot_service_proto protoreflect.FileDescriptor
+var File_bot_service_proto protoreflect.FileDescriptor
 
-const file_proto_bot_service_proto_rawDesc = "" +
+const file_bot_service_proto_rawDesc = "" +
 	"\n" +
-	"\x17proto/bot_service.proto\x12\x0elinktracker.v1\x1a\x1bgoogle/protobuf/empty.proto\"h\n" +
+	"\x11bot_service.proto\x12\x0elinktracker.v1\x1a\x1bgoogle/protobuf/empty.proto\"h\n" +
 	"\x12SendUpdatesRequest\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1e\n" +
 	"\vtg_chat_ids\x18\x02 \x03(\x03R\ttgChatIds\x12 \n" +
@@ -97,23 +96,23 @@ const file_proto_bot_service_proto_rawDesc = "" +
 	"\vSendUpdates\x12\".linktracker.v1.SendUpdatesRequest\x1a\x16.google.protobuf.EmptyB^Z\\gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/proto;linktrackerv1b\x06proto3"
 
 var (
-	file_proto_bot_service_proto_rawDescOnce sync.Once
-	file_proto_bot_service_proto_rawDescData []byte
+	file_bot_service_proto_rawDescOnce sync.Once
+	file_bot_service_proto_rawDescData []byte
 )
 
-func file_proto_bot_service_proto_rawDescGZIP() []byte {
-	file_proto_bot_service_proto_rawDescOnce.Do(func() {
-		file_proto_bot_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_bot_service_proto_rawDesc), len(file_proto_bot_service_proto_rawDesc)))
+func file_bot_service_proto_rawDescGZIP() []byte {
+	file_bot_service_proto_rawDescOnce.Do(func() {
+		file_bot_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_bot_service_proto_rawDesc), len(file_bot_service_proto_rawDesc)))
 	})
-	return file_proto_bot_service_proto_rawDescData
+	return file_bot_service_proto_rawDescData
 }
 
-var file_proto_bot_service_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_proto_bot_service_proto_goTypes = []any{
+var file_bot_service_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_bot_service_proto_goTypes = []any{
 	(*SendUpdatesRequest)(nil), // 0: linktracker.v1.SendUpdatesRequest
 	(*empty.Empty)(nil),        // 1: google.protobuf.Empty
 }
-var file_proto_bot_service_proto_depIdxs = []int32{
+var file_bot_service_proto_depIdxs = []int32{
 	0, // 0: linktracker.v1.BotService.SendUpdates:input_type -> linktracker.v1.SendUpdatesRequest
 	1, // 1: linktracker.v1.BotService.SendUpdates:output_type -> google.protobuf.Empty
 	1, // [1:2] is the sub-list for method output_type
@@ -123,26 +122,26 @@ var file_proto_bot_service_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_proto_bot_service_proto_init() }
-func file_proto_bot_service_proto_init() {
-	if File_proto_bot_service_proto != nil {
+func init() { file_bot_service_proto_init() }
+func file_bot_service_proto_init() {
+	if File_bot_service_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_bot_service_proto_rawDesc), len(file_proto_bot_service_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bot_service_proto_rawDesc), len(file_bot_service_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_proto_bot_service_proto_goTypes,
-		DependencyIndexes: file_proto_bot_service_proto_depIdxs,
-		MessageInfos:      file_proto_bot_service_proto_msgTypes,
+		GoTypes:           file_bot_service_proto_goTypes,
+		DependencyIndexes: file_bot_service_proto_depIdxs,
+		MessageInfos:      file_bot_service_proto_msgTypes,
 	}.Build()
-	File_proto_bot_service_proto = out.File
-	file_proto_bot_service_proto_goTypes = nil
-	file_proto_bot_service_proto_depIdxs = nil
+	File_bot_service_proto = out.File
+	file_bot_service_proto_goTypes = nil
+	file_bot_service_proto_depIdxs = nil
 }

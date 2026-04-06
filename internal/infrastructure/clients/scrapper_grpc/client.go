@@ -61,6 +61,35 @@ func (c *Client) UnTrackLink(ctx context.Context, chatID int64, url string) erro
 	return nil
 }
 
+func (c *Client) AddTag(ctx context.Context, chatID int64, url, tag string) error {
+	_, err := c.client.AddTag(ctx, &pc.AddTagRequest{ChatId: chatID, Url: url, Tag: tag})
+	if err != nil {
+		return mapRPCError("add tag", err)
+	}
+	c.logger.Info("tag added successfully", "chatID", chatID, "url", url, "tag", tag)
+	return nil
+}
+
+func (c *Client) DeleteTag(ctx context.Context, chatID int64, url, tag string) error {
+	_, err := c.client.DeleteTag(ctx, &pc.DeleteTagRequest{ChatId: chatID, Url: url, Tag: tag})
+	if err != nil {
+		return mapRPCError("delete tag", err)
+	}
+	c.logger.Info("tag deleted successfully", "chatID", chatID, "url", url, "tag", tag)
+	return nil
+}
+
+func (c *Client) GetTags(ctx context.Context, chatID int64, url string) ([]string, error) {
+	resp, err := c.client.GetTags(ctx, &pc.GetTagsRequest{ChatId: chatID, Url: url})
+	if err != nil {
+		return nil, mapRPCError("get tags", err)
+	}
+
+	tags := append([]string(nil), resp.GetTags()...)
+	c.logger.Info("tags received successfully", "chatID", chatID, "url", url, "count", len(tags))
+	return tags, nil
+}
+
 func (c *Client) ListLinks(ctx context.Context, chatID int64, tags []string) ([]domain.Link, error) {
 	resp, err := c.client.ListLinks(ctx, &pc.ListLinksRequest{ChatId: chatID, Tags: tags})
 	if err != nil {
@@ -93,7 +122,7 @@ func (c *Client) ListLinks(ctx context.Context, chatID int64, tags []string) ([]
 func (c *Client) IsLinkPresent(ctx context.Context, chatID int64, link string) bool {
 	links, err := c.ListLinks(ctx, chatID, nil)
 	if err != nil {
-		c.logger.Warn("failed to check link presence", "chatID", chatID, "url", link, "error", err)
+		c.logger.Warn("failed to check link existance", "chatID", chatID, "url", link, "error", err)
 		return false
 	}
 	for _, trackedLink := range links {
@@ -116,6 +145,8 @@ func mapRPCError(action string, err error) error {
 			return fmt.Errorf("%s: %w", action, ports.ErrChatNotFound)
 		case ports.ErrLinkNotFound.Error():
 			return fmt.Errorf("%s: %w", action, ports.ErrLinkNotFound)
+		case ports.ErrTagNotFound.Error():
+			return fmt.Errorf("%s: %w", action, ports.ErrTagNotFound)
 		}
 	}
 
@@ -125,6 +156,8 @@ func mapRPCError(action string, err error) error {
 			return fmt.Errorf("%s: %w", action, ports.ErrChatAlreadyExists)
 		case ports.ErrLinkAlreadyExists.Error():
 			return fmt.Errorf("%s: %w", action, ports.ErrLinkAlreadyExists)
+		case ports.ErrTagAlreadyExists.Error():
+			return fmt.Errorf("%s: %w", action, ports.ErrTagAlreadyExists)
 		}
 	}
 

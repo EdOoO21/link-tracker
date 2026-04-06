@@ -21,6 +21,15 @@ type mockRepo struct {
 		chatID int64
 		url    string
 	}
+	tagArgs struct {
+		chatID int64
+		url    string
+		tag    string
+	}
+	getTagsArgs struct {
+		chatID int64
+		url    string
+	}
 	listArgs struct {
 		chatID int64
 		tags   []string
@@ -29,9 +38,13 @@ type mockRepo struct {
 
 	trackErr   error
 	untrackErr error
+	addTagErr  error
+	delTagErr  error
+	getTagsErr error
 	listErr    error
 	addChatErr error
 	listResp   []domain.Link
+	tagsResp   []string
 	linkExists bool
 }
 
@@ -46,6 +59,26 @@ func (m *mockRepo) UnTrackLink(_ context.Context, chatID int64, url string) erro
 	m.untrackArgs.chatID = chatID
 	m.untrackArgs.url = url
 	return m.untrackErr
+}
+
+func (m *mockRepo) AddTag(_ context.Context, chatID int64, url, tag string) error {
+	m.tagArgs.chatID = chatID
+	m.tagArgs.url = url
+	m.tagArgs.tag = tag
+	return m.addTagErr
+}
+
+func (m *mockRepo) DeleteTag(_ context.Context, chatID int64, url, tag string) error {
+	m.tagArgs.chatID = chatID
+	m.tagArgs.url = url
+	m.tagArgs.tag = tag
+	return m.delTagErr
+}
+
+func (m *mockRepo) GetTags(_ context.Context, chatID int64, url string) ([]string, error) {
+	m.getTagsArgs.chatID = chatID
+	m.getTagsArgs.url = url
+	return m.tagsResp, m.getTagsErr
 }
 
 func (m *mockRepo) ListLinks(_ context.Context, chatID int64, tags []string) ([]domain.Link, error) {
@@ -234,5 +267,137 @@ func TestComputeGotTagsWithoutTags(t *testing.T) {
 	}
 	if len(repo.trackLinkArgs.tags) != 0 {
 		t.Fatalf("got tags %v, want empty slice", repo.trackLinkArgs.tags)
+	}
+}
+
+func TestComputeGotTagsWithSpacesInTag(t *testing.T) {
+	chatID := int64(23)
+	repo := &mockRepo{}
+	app := &App{repo: repo, stMachine: StateMachine{chatID: {State: LinkGot, URL: "https://github.com/user/repo"}}}
+
+	msg, command := app.computeGotTags(context.Background(), chatID, "machine learning, backend")
+
+	if msg.Text != InvalidTags {
+		t.Fatalf("got text %q, want %q", msg.Text, InvalidTags)
+	}
+	if command != TextInvalidTagGot {
+		t.Fatalf("got command %q, want %q", command, TextInvalidTagGot)
+	}
+	if repo.trackLinkArgs.chatID != 0 {
+		t.Fatalf("expected TrackLink not to be called, got args %+v", repo.trackLinkArgs)
+	}
+	if app.stMachine[chatID] == nil || app.stMachine[chatID].State != LinkGot {
+		t.Fatalf("expected state to stay active, got %+v", app.stMachine[chatID])
+	}
+}
+
+func TestComputeAddTag(t *testing.T) {
+	chatID := int64(31)
+	tests := []struct {
+		name      string
+		args      string
+		addTagErr error
+		wantText  string
+	}{
+		{name: "invalid args", args: "", wantText: AddTagUsage},
+		{name: "tag with spaces", args: "https://github.com/user/repo machine learning", wantText: AddTagUsage},
+		{name: "chat not found", args: "https://github.com/user/repo backend", addTagErr: ports.ErrChatNotFound, wantText: ChatIDNotFound},
+		{name: "link not found", args: "https://github.com/user/repo backend", addTagErr: ports.ErrLinkNotFound, wantText: UntrackNotExistedURL},
+		{name: "tag exists", args: "https://github.com/user/repo backend", addTagErr: ports.ErrTagAlreadyExists, wantText: AddTagAlreadyExists},
+		{name: "unexpected error", args: "https://github.com/user/repo backend", addTagErr: errors.New("boom"), wantText: AddTagFailed},
+		{name: "success", args: "https://github.com/user/repo backend", wantText: AddTagSucceeded},
+	}
+
+	for _, tt := range tests {
+		repo := &mockRepo{addTagErr: tt.addTagErr}
+		app := &App{repo: repo, stMachine: StateMachine{chatID: {State: LinkGot}}}
+		update := commandUpdate(chatID, "/add_tag", tt.args)
+		msg := app.computeAddTag(context.Background(), update)
+
+		if msg.Text != tt.wantText {
+			t.Fatalf("case %q: got text %q, want %q", tt.name, msg.Text, tt.wantText)
+		}
+		if tt.args != "" && tt.wantText != AddTagUsage {
+			if repo.tagArgs.chatID != chatID || repo.tagArgs.url != "https://github.com/user/repo" || repo.tagArgs.tag != "backend" {
+				t.Fatalf("case %q: got tag args %+v", tt.name, repo.tagArgs)
+			}
+		}
+		if _, ok := app.stMachine[chatID]; ok {
+			t.Fatal("expected state to be cleared on add_tag")
+		}
+	}
+}
+
+func TestComputeGetTags(t *testing.T) {
+	chatID := int64(32)
+	tests := []struct {
+		name       string
+		args       string
+		tagsResp   []string
+		getTagsErr error
+		wantText   string
+	}{
+		{name: "invalid args", args: "", wantText: GetTagsUsage},
+		{name: "chat not found", args: "https://github.com/user/repo", getTagsErr: ports.ErrChatNotFound, wantText: ChatIDNotFound},
+		{name: "link not found", args: "https://github.com/user/repo", getTagsErr: ports.ErrLinkNotFound, wantText: UntrackNotExistedURL},
+		{name: "unexpected error", args: "https://github.com/user/repo", getTagsErr: errors.New("boom"), wantText: GetTagsFailed},
+		{name: "empty", args: "https://github.com/user/repo", wantText: GetTagsEmpty},
+		{name: "success", args: "https://github.com/user/repo", tagsResp: []string{"backend", "go"}, wantText: "Теги для ссылки:\n\nhttps://github.com/user/repo\n\n1. backend\n2. go\n"},
+	}
+
+	for _, tt := range tests {
+		repo := &mockRepo{tagsResp: tt.tagsResp, getTagsErr: tt.getTagsErr}
+		app := &App{repo: repo, stMachine: StateMachine{chatID: {State: TrackCommandGot}}}
+		update := commandUpdate(chatID, "/get_tags", tt.args)
+		msg := app.computeGetTags(context.Background(), update)
+
+		if msg.Text != tt.wantText {
+			t.Fatalf("case %q: got text %q, want %q", tt.name, msg.Text, tt.wantText)
+		}
+		if tt.args != "" && tt.wantText != GetTagsUsage {
+			if repo.getTagsArgs.chatID != chatID || repo.getTagsArgs.url != "https://github.com/user/repo" {
+				t.Fatalf("case %q: got get tags args %+v", tt.name, repo.getTagsArgs)
+			}
+		}
+		if _, ok := app.stMachine[chatID]; ok {
+			t.Fatal("expected state to be cleared on get_tags")
+		}
+	}
+}
+
+func TestComputeDeleteTag(t *testing.T) {
+	chatID := int64(33)
+	tests := []struct {
+		name      string
+		args      string
+		delTagErr error
+		wantText  string
+	}{
+		{name: "invalid args", args: "", wantText: DeleteTagUsage},
+		{name: "tag with spaces", args: "https://github.com/user/repo machine learning", wantText: DeleteTagUsage},
+		{name: "chat not found", args: "https://github.com/user/repo backend", delTagErr: ports.ErrChatNotFound, wantText: ChatIDNotFound},
+		{name: "link not found", args: "https://github.com/user/repo backend", delTagErr: ports.ErrLinkNotFound, wantText: UntrackNotExistedURL},
+		{name: "tag not found", args: "https://github.com/user/repo backend", delTagErr: ports.ErrTagNotFound, wantText: DeleteTagNotFound},
+		{name: "unexpected error", args: "https://github.com/user/repo backend", delTagErr: errors.New("boom"), wantText: DeleteTagFailed},
+		{name: "success", args: "https://github.com/user/repo backend", wantText: DeleteTagSucceeded},
+	}
+
+	for _, tt := range tests {
+		repo := &mockRepo{delTagErr: tt.delTagErr}
+		app := &App{repo: repo, stMachine: StateMachine{chatID: {State: TrackCommandGot}}}
+		update := commandUpdate(chatID, "/delete_tag", tt.args)
+		msg := app.computeDeleteTag(context.Background(), update)
+
+		if msg.Text != tt.wantText {
+			t.Fatalf("case %q: got text %q, want %q", tt.name, msg.Text, tt.wantText)
+		}
+		if tt.args != "" && tt.wantText != DeleteTagUsage {
+			if repo.tagArgs.chatID != chatID || repo.tagArgs.url != "https://github.com/user/repo" || repo.tagArgs.tag != "backend" {
+				t.Fatalf("case %q: got tag args %+v", tt.name, repo.tagArgs)
+			}
+		}
+		if _, ok := app.stMachine[chatID]; ok {
+			t.Fatal("expected state to be cleared on delete_tag")
+		}
 	}
 }

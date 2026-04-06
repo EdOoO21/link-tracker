@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	scrapperinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/interfaces"
@@ -143,6 +144,54 @@ func (s *Scrapper) DeleteLink(ctx context.Context, link models.DeleteLink) error
 	return nil
 }
 
+func (s *Scrapper) AddTag(ctx context.Context, tag models.AddTag) error {
+	return s.mutateTag(
+		ctx,
+		"add",
+		"added",
+		tag.ChatID,
+		tag.URL,
+		tag.Tag,
+		s.repo.AddTag,
+		ports.ErrTagAlreadyExists,
+		"tag already exists",
+	)
+}
+
+func (s *Scrapper) GetTags(ctx context.Context, chatID int64, url string) ([]string, error) {
+	s.logger.Info("get tags requested", "chatID", chatID, "url", url)
+	tags, err := s.repo.GetTags(ctx, chatID, url)
+	if err != nil {
+		switch {
+		case errors.Is(err, ports.ErrChatNotFound):
+			s.logger.Warn("get tags failed: chat not found", "chatID", chatID, "url", url)
+		case errors.Is(err, ports.ErrLinkNotFound):
+			s.logger.Warn("get tags failed: link not found", "chatID", chatID, "url", url)
+		default:
+			s.logger.Error("get tags failed", "chatID", chatID, "url", url, "error", err)
+		}
+		return nil, fmt.Errorf("get tags in repository: %w", err)
+	}
+
+	slices.Sort(tags)
+	s.logger.Info("tags loaded", "chatID", chatID, "url", url, "count", len(tags))
+	return tags, nil
+}
+
+func (s *Scrapper) DeleteTag(ctx context.Context, tag models.DeleteTag) error {
+	return s.mutateTag(
+		ctx,
+		"delete",
+		"deleted",
+		tag.ChatID,
+		tag.URL,
+		tag.Tag,
+		s.repo.DeleteTag,
+		ports.ErrTagNotFound,
+		"tag not found",
+	)
+}
+
 func (s *Scrapper) GetLinks(ctx context.Context, chatID int64, tags []string) ([]domain.Link, error) {
 	s.logger.Info("get links requested", "chatID", chatID, "tags", tags)
 	links, err := s.repo.ListLinks(ctx, chatID, tags)
@@ -216,4 +265,35 @@ func (s *Scrapper) getResourceUpdate(ctx context.Context, rawURL string) (ports.
 	}
 
 	return ports.ResourceUpdate{}, "", ports.ErrLinkNotFound
+}
+
+func (s *Scrapper) mutateTag(
+	ctx context.Context,
+	action string,
+	successAction string,
+	chatID int64,
+	url string,
+	tag string,
+	operation func(context.Context, int64, string, string) error,
+	expectedErr error,
+	expectedWarn string,
+) error {
+	s.logger.Info(action+" tag requested", "chatID", chatID, "url", url, "tag", tag)
+	err := operation(ctx, chatID, url, tag)
+	if err != nil {
+		switch {
+		case errors.Is(err, ports.ErrChatNotFound):
+			s.logger.Warn(action+" tag failed: chat not found", "chatID", chatID, "url", url, "tag", tag)
+		case errors.Is(err, ports.ErrLinkNotFound):
+			s.logger.Warn(action+" tag failed: link not found", "chatID", chatID, "url", url, "tag", tag)
+		case errors.Is(err, expectedErr):
+			s.logger.Warn(action+" tag failed: "+expectedWarn, "chatID", chatID, "url", url, "tag", tag)
+		default:
+			s.logger.Error(action+" tag failed", "chatID", chatID, "url", url, "tag", tag, "error", err)
+		}
+		return fmt.Errorf("%s tag in repository: %w", action, err)
+	}
+
+	s.logger.Info("tag "+successAction, "chatID", chatID, "url", url, "tag", tag)
+	return nil
 }

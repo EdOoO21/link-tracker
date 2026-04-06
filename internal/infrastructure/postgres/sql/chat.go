@@ -49,7 +49,7 @@ func (r *Repository) DeleteChat(ctx context.Context, chatID int64) error {
 
 	present, err := isPresent(ctx, tx, chatID)
 	if err != nil {
-		return fmt.Errorf("check chat presence: %w", err)
+		return fmt.Errorf("check chat existance: %w", err)
 	}
 	if !present {
 		return ports.ErrChatNotFound

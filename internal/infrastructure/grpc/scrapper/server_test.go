@@ -23,14 +23,34 @@ func (noopLogger) Error(string, ...any) {}
 
 type mockScrapperService struct {
 	gotAddLink    models.AddLink
+	gotAddTag     models.AddTag
+	gotDeleteTag  models.DeleteTag
 	addLinkErr    error
+	addTagErr     error
+	deleteTagErr  error
 	listLinksResp []domain.Link
 	listLinksErr  error
+	getTagsResp   []string
+	getTagsErr    error
 }
 
 func (m *mockScrapperService) AddLink(_ context.Context, link models.AddLink) error {
 	m.gotAddLink = link
 	return m.addLinkErr
+}
+
+func (m *mockScrapperService) AddTag(_ context.Context, tag models.AddTag) error {
+	m.gotAddTag = tag
+	return m.addTagErr
+}
+
+func (m *mockScrapperService) GetTags(_ context.Context, _ int64, _ string) ([]string, error) {
+	return m.getTagsResp, m.getTagsErr
+}
+
+func (m *mockScrapperService) DeleteTag(_ context.Context, tag models.DeleteTag) error {
+	m.gotDeleteTag = tag
+	return m.deleteTagErr
 }
 
 func (m *mockScrapperService) GetLinks(_ context.Context, _ int64, _ []string) ([]domain.Link, error) {
@@ -92,6 +112,41 @@ func TestScrapperServiceServerListLinks(t *testing.T) {
 	}
 }
 
+func TestScrapperServiceServerAddTag(t *testing.T) {
+	service := &mockScrapperService{}
+	server := NewScrapperServiceServer(noopLogger{}, service)
+	req := &pb.AddTagRequest{ChatId: 42, Url: "https://github.com/user/repo", Tag: "backend"}
+
+	resp, err := server.AddTag(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+
+	want := models.AddTag{ChatID: 42, URL: "https://github.com/user/repo", Tag: "backend"}
+	if !reflect.DeepEqual(service.gotAddTag, want) {
+		t.Fatalf("got %+v, want %+v", service.gotAddTag, want)
+	}
+}
+
+func TestScrapperServiceServerGetTags(t *testing.T) {
+	service := &mockScrapperService{getTagsResp: []string{"backend", "go"}}
+	server := NewScrapperServiceServer(noopLogger{}, service)
+
+	resp, err := server.GetTags(context.Background(), &pb.GetTagsRequest{ChatId: 1, Url: "https://github.com/user/repo"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.GetSize() != 2 {
+		t.Fatalf("got size %d", resp.GetSize())
+	}
+	if !reflect.DeepEqual(resp.GetTags(), []string{"backend", "go"}) {
+		t.Fatalf("got tags %v", resp.GetTags())
+	}
+}
+
 func TestScrapperToStatusError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -102,6 +157,8 @@ func TestScrapperToStatusError(t *testing.T) {
 		{name: "link not found", err: ports.ErrLinkNotFound, wantCode: codes.NotFound},
 		{name: "chat exists", err: ports.ErrChatAlreadyExists, wantCode: codes.AlreadyExists},
 		{name: "link exists", err: ports.ErrLinkAlreadyExists, wantCode: codes.AlreadyExists},
+		{name: "tag exists", err: ports.ErrTagAlreadyExists, wantCode: codes.AlreadyExists},
+		{name: "tag not found", err: ports.ErrTagNotFound, wantCode: codes.NotFound},
 		{name: "unknown", err: errors.New("boom"), wantCode: codes.Internal},
 	}
 

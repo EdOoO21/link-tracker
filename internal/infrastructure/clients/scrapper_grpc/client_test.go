@@ -24,9 +24,16 @@ func (noopLogger) Error(string, ...any) {}
 
 type mockScrapperServiceClient struct {
 	addLinkRequest   *pc.AddLinkRequest
+	addTagRequest    *pc.AddTagRequest
+	deleteTagRequest *pc.DeleteTagRequest
+	getTagsRequest   *pc.GetTagsRequest
 	listLinksRequest *pc.ListLinksRequest
 	listLinksResp    *pc.ListLinksResponse
+	getTagsResp      *pc.GetTagsResponse
 	addLinkErr       error
+	addTagErr        error
+	deleteTagErr     error
+	getTagsErr       error
 	listLinksErr     error
 }
 
@@ -45,6 +52,21 @@ func (m *mockScrapperServiceClient) AddLink(_ context.Context, in *pc.AddLinkReq
 
 func (m *mockScrapperServiceClient) DeleteLink(_ context.Context, _ *pc.DeleteLinkRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
+}
+
+func (m *mockScrapperServiceClient) AddTag(_ context.Context, in *pc.AddTagRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	m.addTagRequest = in
+	return &empty.Empty{}, m.addTagErr
+}
+
+func (m *mockScrapperServiceClient) DeleteTag(_ context.Context, in *pc.DeleteTagRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	m.deleteTagRequest = in
+	return &empty.Empty{}, m.deleteTagErr
+}
+
+func (m *mockScrapperServiceClient) GetTags(_ context.Context, in *pc.GetTagsRequest, _ ...grpc.CallOption) (*pc.GetTagsResponse, error) {
+	m.getTagsRequest = in
+	return m.getTagsResp, m.getTagsErr
 }
 
 func (m *mockScrapperServiceClient) ListLinks(_ context.Context, in *pc.ListLinksRequest, _ ...grpc.CallOption) (*pc.ListLinksResponse, error) {
@@ -110,6 +132,39 @@ func TestGRPCScrapperClientListLinks(t *testing.T) {
 	}
 }
 
+func TestGRPCScrapperClientTagMethods(t *testing.T) {
+	mockClient := &mockScrapperServiceClient{
+		getTagsResp: &pc.GetTagsResponse{Tags: []string{"backend", "go"}, Size: 2},
+	}
+	client := &Client{client: mockClient, logger: noopLogger{}}
+
+	if err := client.AddTag(context.Background(), 7, "https://github.com/user/repo", "backend"); err != nil {
+		t.Fatalf("unexpected add tag error: %v", err)
+	}
+	if !reflect.DeepEqual(mockClient.addTagRequest, &pc.AddTagRequest{ChatId: 7, Url: "https://github.com/user/repo", Tag: "backend"}) {
+		t.Fatalf("got add tag request %+v", mockClient.addTagRequest)
+	}
+
+	tags, err := client.GetTags(context.Background(), 7, "https://github.com/user/repo")
+	if err != nil {
+		t.Fatalf("unexpected get tags error: %v", err)
+	}
+	if !reflect.DeepEqual(mockClient.getTagsRequest, &pc.GetTagsRequest{ChatId: 7, Url: "https://github.com/user/repo"}) {
+		t.Fatalf("got get tags request %+v", mockClient.getTagsRequest)
+	}
+	if !reflect.DeepEqual(tags, []string{"backend", "go"}) {
+		t.Fatalf("got tags %v", tags)
+	}
+
+	deleteErr := client.DeleteTag(context.Background(), 7, "https://github.com/user/repo", "backend")
+	if deleteErr != nil {
+		t.Fatalf("unexpected delete tag error: %v", deleteErr)
+	}
+	if !reflect.DeepEqual(mockClient.deleteTagRequest, &pc.DeleteTagRequest{ChatId: 7, Url: "https://github.com/user/repo", Tag: "backend"}) {
+		t.Fatalf("got delete tag request %+v", mockClient.deleteTagRequest)
+	}
+}
+
 func TestMapRPCError(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -120,6 +175,8 @@ func TestMapRPCError(t *testing.T) {
 		{name: "link not found", err: status.Error(codes.NotFound, ports.ErrLinkNotFound.Error()), wantErr: ports.ErrLinkNotFound},
 		{name: "chat exists", err: status.Error(codes.AlreadyExists, ports.ErrChatAlreadyExists.Error()), wantErr: ports.ErrChatAlreadyExists},
 		{name: "link exists", err: status.Error(codes.AlreadyExists, ports.ErrLinkAlreadyExists.Error()), wantErr: ports.ErrLinkAlreadyExists},
+		{name: "tag exists", err: status.Error(codes.AlreadyExists, ports.ErrTagAlreadyExists.Error()), wantErr: ports.ErrTagAlreadyExists},
+		{name: "tag not found", err: status.Error(codes.NotFound, ports.ErrTagNotFound.Error()), wantErr: ports.ErrTagNotFound},
 	}
 
 	for _, tt := range tests {

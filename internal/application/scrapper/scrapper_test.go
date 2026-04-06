@@ -21,12 +21,16 @@ func (noopLogger) Error(string, ...any) {}
 type stubRepo struct {
 	trackErr   error
 	untrackErr error
+	addTagErr  error
+	getTagsErr error
+	delTagErr  error
 	present    map[int64]bool
 	presentErr error
 	addChatErr error
 	deleteErr  error
 	listResp   []domain.Link
 	listErr    error
+	tagsResp   []string
 	allLinks   []models.TrackedLink
 	listAllErr error
 	updateErr  error
@@ -37,6 +41,15 @@ type stubRepo struct {
 		tags   []string
 	}
 	untrackArgs struct {
+		chatID int64
+		url    string
+	}
+	tagArgs struct {
+		chatID int64
+		url    string
+		tag    string
+	}
+	getTagsArgs struct {
 		chatID int64
 		url    string
 	}
@@ -61,6 +74,26 @@ func (s *stubRepo) UnTrackLink(_ context.Context, chatID int64, url string) erro
 
 func (s *stubRepo) ListLinks(_ context.Context, _ int64, _ []string) ([]domain.Link, error) {
 	return s.listResp, s.listErr
+}
+
+func (s *stubRepo) AddTag(_ context.Context, chatID int64, url, tag string) error {
+	s.tagArgs.chatID = chatID
+	s.tagArgs.url = url
+	s.tagArgs.tag = tag
+	return s.addTagErr
+}
+
+func (s *stubRepo) DeleteTag(_ context.Context, chatID int64, url, tag string) error {
+	s.tagArgs.chatID = chatID
+	s.tagArgs.url = url
+	s.tagArgs.tag = tag
+	return s.delTagErr
+}
+
+func (s *stubRepo) GetTags(_ context.Context, chatID int64, url string) ([]string, error) {
+	s.getTagsArgs.chatID = chatID
+	s.getTagsArgs.url = url
+	return s.tagsResp, s.getTagsErr
 }
 
 func (s *stubRepo) ListAllLinks(_ context.Context) ([]models.TrackedLink, error) {
@@ -169,6 +202,26 @@ func TestScrapperCRUD(t *testing.T) {
 		t.Fatalf("got untrack args %+v", repo.untrackArgs)
 	}
 
+	if addTagErr := svc.AddTag(ctx, models.AddTag{ChatID: 1, URL: "https://github.com/user/repo", Tag: "backend"}); addTagErr != nil {
+		t.Fatalf("unexpected add tag error: %v", addTagErr)
+	}
+	if repo.tagArgs.chatID != 1 || repo.tagArgs.url != "https://github.com/user/repo" || repo.tagArgs.tag != "backend" {
+		t.Fatalf("got tag args %+v", repo.tagArgs)
+	}
+
+	repo.tagsResp = []string{"backend", "go"}
+	tags, tagsErr := svc.GetTags(ctx, 1, "https://github.com/user/repo")
+	if tagsErr != nil {
+		t.Fatalf("unexpected get tags error: %v", tagsErr)
+	}
+	if !slices.Equal(tags, []string{"backend", "go"}) {
+		t.Fatalf("got tags %v", tags)
+	}
+
+	if deleteTagErr := svc.DeleteTag(ctx, models.DeleteTag{ChatID: 1, URL: "https://github.com/user/repo", Tag: "backend"}); deleteTagErr != nil {
+		t.Fatalf("unexpected delete tag error: %v", deleteTagErr)
+	}
+
 	if addChatErr := svc.AddChat(ctx, 2); addChatErr != nil {
 		t.Fatalf("unexpected add chat error: %v", addChatErr)
 	}
@@ -181,6 +234,9 @@ func TestScrapperErrors(t *testing.T) {
 	service := NewScrapper(noopLogger{}, &stubRepo{
 		trackErr:   ports.ErrChatNotFound,
 		untrackErr: ports.ErrChatNotFound,
+		addTagErr:  ports.ErrChatNotFound,
+		getTagsErr: ports.ErrChatNotFound,
+		delTagErr:  ports.ErrChatNotFound,
 		listErr:    ports.ErrChatNotFound,
 	}, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{})
 	ctx := context.Background()
@@ -193,10 +249,22 @@ func TestScrapperErrors(t *testing.T) {
 	if _, err := service.GetLinks(ctx, 1, nil); !errors.Is(err, ports.ErrChatNotFound) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
 	}
+	if err := service.AddTag(ctx, models.AddTag{ChatID: 1}); !errors.Is(err, ports.ErrChatNotFound) {
+		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
+	}
+	if _, err := service.GetTags(ctx, 1, "https://github.com/user/repo"); !errors.Is(err, ports.ErrChatNotFound) {
+		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
+	}
+	if err := service.DeleteTag(ctx, models.DeleteTag{ChatID: 1}); !errors.Is(err, ports.ErrChatNotFound) {
+		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
+	}
 
 	repo := &stubRepo{
 		trackErr:   ports.ErrLinkAlreadyExists,
 		untrackErr: ports.ErrLinkNotFound,
+		addTagErr:  ports.ErrTagAlreadyExists,
+		getTagsErr: ports.ErrLinkNotFound,
+		delTagErr:  ports.ErrTagNotFound,
 		addChatErr: ports.ErrChatAlreadyExists,
 		deleteErr:  ports.ErrChatNotFound,
 	}
@@ -206,6 +274,15 @@ func TestScrapperErrors(t *testing.T) {
 	}
 	if err := service.DeleteLink(ctx, models.DeleteLink{ChatID: 1}); !errors.Is(err, ports.ErrLinkNotFound) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrLinkNotFound)
+	}
+	if err := service.AddTag(ctx, models.AddTag{ChatID: 1}); !errors.Is(err, ports.ErrTagAlreadyExists) {
+		t.Fatalf("got err %v, want %v", err, ports.ErrTagAlreadyExists)
+	}
+	if _, err := service.GetTags(ctx, 1, "https://github.com/user/repo"); !errors.Is(err, ports.ErrLinkNotFound) {
+		t.Fatalf("got err %v, want %v", err, ports.ErrLinkNotFound)
+	}
+	if err := service.DeleteTag(ctx, models.DeleteTag{ChatID: 1}); !errors.Is(err, ports.ErrTagNotFound) {
+		t.Fatalf("got err %v, want %v", err, ports.ErrTagNotFound)
 	}
 	if err := service.AddChat(ctx, 1); !errors.Is(err, ports.ErrChatAlreadyExists) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrChatAlreadyExists)
