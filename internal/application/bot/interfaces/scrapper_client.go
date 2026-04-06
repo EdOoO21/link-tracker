@@ -6,7 +6,7 @@ import (
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 )
 
-type Repository interface {
+type ScrapperClient interface {
 	// returns ports.ErrLinkAlreadyExists if link exits, otherwise nil or other error
 	TrackLink(ctx context.Context, chatID int64, url string, tags []string) error
 	// returns ports.ErrLinkNotFound if link exits, otherwise nil or other error
