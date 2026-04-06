@@ -83,7 +83,7 @@ func run(ctx context.Context, stop context.CancelFunc, logger *logs.Logger) erro
 	return nil
 }
 
-func newScrapperGRPCClient(logger *logs.Logger, addr string) (botinterfaces.Repository, *grpc.ClientConn, error) {
+func newScrapperGRPCClient(logger *logs.Logger, addr string) (botinterfaces.ScrapperClient, *grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

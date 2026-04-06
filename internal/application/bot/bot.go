@@ -84,12 +84,12 @@ const (
 type App struct {
 	logger    ports.Logger
 	config    *settings.Config
-	repo      inf.Repository
+	repo      inf.ScrapperClient
 	stMachine StateMachine
 	bot       inf.TGBot
 }
 
-func NewApp(logger ports.Logger, config *settings.Config, repo inf.Repository, bot inf.TGBot) *App {
+func NewApp(logger ports.Logger, config *settings.Config, repo inf.ScrapperClient, bot inf.TGBot) *App {
 	return &App{
 		logger:    logger,
 		config:    config,
