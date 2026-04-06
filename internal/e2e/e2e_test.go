@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -45,11 +47,51 @@ func TestBotAndScrapperE2EOverGRPC(t *testing.T) {
 		_ = nw.Remove(ctx)
 	}()
 
+	const (
+		postgresImage        = "postgres:16-alpine"
+		postgresDBName       = "linktracker_e2e"
+		postgresUser         = "postgres"
+		postgresPassword     = "postgres"
+		postgresAlias        = "postgres"
+		postgresInternalPort = "5432"
+		botPort              = "9090/tcp"
+		scrapperPort         = "9080/tcp"
+		startupTimeout       = 60 * time.Second
+	)
+
+	postgresContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		Started: true,
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        postgresImage,
+			ExposedPorts: []string{postgresInternalPort + "/tcp"},
+			Env: map[string]string{
+				"POSTGRES_DB":       postgresDBName,
+				"POSTGRES_USER":     postgresUser,
+				"POSTGRES_PASSWORD": postgresPassword,
+			},
+			Networks: []string{nw.Name},
+			NetworkAliases: map[string][]string{
+				nw.Name: {postgresAlias},
+			},
+			WaitingFor: wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(startupTimeout),
+		},
+	})
+	if err != nil {
+		t.Fatalf("start postgres container: %v", err)
+	}
+	defer func() {
+		_ = postgresContainer.Terminate(ctx)
+	}()
+
+	applyPostgresMigration(ctx, t, postgresContainer, postgresDBName, postgresUser, postgresPassword)
+
 	botContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		Started: true,
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        "linktracker-bot-e2e:local",
-			ExposedPorts: []string{"9090/tcp"},
+			ExposedPorts: []string{botPort},
 			Env: map[string]string{
 				"APP_TELEGRAM_TOKEN":         "dummy-token",
 				"APP_TELEGRAM_COMMANDS_PATH": "/app/commands.json",
@@ -60,7 +102,7 @@ func TestBotAndScrapperE2EOverGRPC(t *testing.T) {
 			NetworkAliases: map[string][]string{
 				nw.Name: {"bot"},
 			},
-			WaitingFor: wait.ForListeningPort("9090/tcp").WithStartupTimeout(60 * time.Second),
+			WaitingFor: wait.ForListeningPort(botPort).WithStartupTimeout(startupTimeout),
 		},
 	})
 	if err != nil {
@@ -74,17 +116,21 @@ func TestBotAndScrapperE2EOverGRPC(t *testing.T) {
 		Started: true,
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        "linktracker-scrapper-e2e:local",
-			ExposedPorts: []string{"9080/tcp"},
+			ExposedPorts: []string{scrapperPort},
 			Env: map[string]string{
 				"APP_SCRAPPER_CHECK_INTERVAL": "1s",
 				"APP_SCRAPPER_BASE_URL":       "http://scrapper:9080",
 				"APP_BOT_BASE_URL":            "http://bot:9090",
+				"APP_DATABASE_URL":            fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", postgresUser, postgresPassword, postgresAlias, postgresInternalPort, postgresDBName),
+				"APP_DATABASE_USER":           postgresUser,
+				"APP_DATABASE_PASSWORD":       postgresPassword,
+				"APP_DATABASE_ACCESS_TYPE":    "sql",
 			},
 			Networks: []string{nw.Name},
 			NetworkAliases: map[string][]string{
 				nw.Name: {"scrapper"},
 			},
-			WaitingFor: wait.ForListeningPort("9080/tcp").WithStartupTimeout(60 * time.Second),
+			WaitingFor: wait.ForListeningPort(scrapperPort).WithStartupTimeout(startupTimeout),
 		},
 	})
 	if err != nil {
@@ -98,7 +144,7 @@ func TestBotAndScrapperE2EOverGRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scrapper host: %v", err)
 	}
-	port, err := scrapperContainer.MappedPort(ctx, "9080/tcp")
+	port, err := scrapperContainer.MappedPort(ctx, scrapperPort)
 	if err != nil {
 		t.Fatalf("scrapper mapped port: %v", err)
 	}
@@ -158,4 +204,58 @@ func buildImage(t *testing.T, repoRoot, tag, service string) {
 	if err != nil {
 		t.Fatalf("build image %s: %v\n%s", tag, err, string(output))
 	}
+}
+
+func applyPostgresMigration(
+	ctx context.Context,
+	t *testing.T,
+	postgresContainer testcontainers.Container,
+	databaseName string,
+	user string,
+	password string,
+) {
+	t.Helper()
+
+	host, err := postgresContainer.Host(ctx)
+	if err != nil {
+		t.Fatalf("postgres host: %v", err)
+	}
+	port, err := postgresContainer.MappedPort(ctx, "5432/tcp")
+	if err != nil {
+		t.Fatalf("postgres mapped port: %v", err)
+	}
+
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, password, host, port.Port(), databaseName)
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("create postgres pool: %v", err)
+	}
+	defer pool.Close()
+
+	pingErr := pool.Ping(ctx)
+	if pingErr != nil {
+		t.Fatalf("ping postgres: %v", pingErr)
+	}
+
+	migrationPath := e2eMigrationPath(t)
+	script, err := os.ReadFile(migrationPath)
+	if err != nil {
+		t.Fatalf("read migration %s: %v", migrationPath, err)
+	}
+
+	_, execErr := pool.Exec(ctx, string(script))
+	if execErr != nil {
+		t.Fatalf("apply migration %s: %v", migrationPath, execErr)
+	}
+}
+
+func e2eMigrationPath(t *testing.T) string {
+	t.Helper()
+
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve e2e test file path")
+	}
+
+	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", "migrations", "V1__init.sql"))
 }

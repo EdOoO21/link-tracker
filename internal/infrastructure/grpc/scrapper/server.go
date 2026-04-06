@@ -66,6 +66,42 @@ func (s *ServiceServer) DeleteLink(ctx context.Context, req *pb.DeleteLinkReques
 	return &empty.Empty{}, nil
 }
 
+func (s *ServiceServer) AddTag(ctx context.Context, req *pb.AddTagRequest) (*empty.Empty, error) {
+	tag := models.AddTag{
+		ChatID: req.GetChatId(),
+		URL:    req.GetUrl(),
+		Tag:    req.GetTag(),
+	}
+	if err := s.scrapperService.AddTag(ctx, tag); err != nil {
+		return nil, toStatusError(err)
+	}
+	return &empty.Empty{}, nil
+}
+
+func (s *ServiceServer) DeleteTag(ctx context.Context, req *pb.DeleteTagRequest) (*empty.Empty, error) {
+	tag := models.DeleteTag{
+		ChatID: req.GetChatId(),
+		URL:    req.GetUrl(),
+		Tag:    req.GetTag(),
+	}
+	if err := s.scrapperService.DeleteTag(ctx, tag); err != nil {
+		return nil, toStatusError(err)
+	}
+	return &empty.Empty{}, nil
+}
+
+func (s *ServiceServer) GetTags(ctx context.Context, req *pb.GetTagsRequest) (*pb.GetTagsResponse, error) {
+	tags, err := s.scrapperService.GetTags(ctx, req.GetChatId(), req.GetUrl())
+	if err != nil {
+		return nil, toStatusError(err)
+	}
+
+	return &pb.GetTagsResponse{
+		Tags: tags,
+		Size: int32(len(tags)),
+	}, nil
+}
+
 func (s *ServiceServer) ListLinks(ctx context.Context, req *pb.ListLinksRequest) (*pb.ListLinksResponse, error) {
 	links, err := s.scrapperService.GetLinks(ctx, req.GetChatId(), req.GetTags())
 	if err != nil {
@@ -94,6 +130,10 @@ func toStatusError(err error) error {
 		return status.Error(codes.AlreadyExists, ports.ErrChatAlreadyExists.Error())
 	case errors.Is(err, ports.ErrLinkAlreadyExists):
 		return status.Error(codes.AlreadyExists, ports.ErrLinkAlreadyExists.Error())
+	case errors.Is(err, ports.ErrTagAlreadyExists):
+		return status.Error(codes.AlreadyExists, ports.ErrTagAlreadyExists.Error())
+	case errors.Is(err, ports.ErrTagNotFound):
+		return status.Error(codes.NotFound, ports.ErrTagNotFound.Error())
 	default:
 		return status.Error(codes.Internal, err.Error())
 	}

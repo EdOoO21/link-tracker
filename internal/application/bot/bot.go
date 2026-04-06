@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	inf "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/bot/interfaces"
@@ -20,6 +21,7 @@ const (
 	Unknown                  = "unknown"
 	NotCommand               = "not a command"
 	TextInvalidLinkGot       = "invalid link got"
+	TextInvalidTagGot        = "invalid tag got"
 	TextValidLinkGot         = "valid link got"
 	URLAdded                 = "url added"
 	URLExists                = "url exists"
@@ -31,9 +33,12 @@ const (
 	HelpCommand = "/start - начало работы пользователя\n" +
 		"/help - вывод списка доступных команд\n" +
 		"/track - начать процесс добавления ссылки к отслеживанию\n" +
+		"/cancel - прекратить процесс добавления ссылки к отслеживанию\n" +
 		"/untrack - прекратить отслеживание ссылки\n" +
 		"/list - вывести список всех отслеживаемых ссылок (опционально фильтр по тегу)\n" +
-		"/cancel - прекратить процесс добавления ссылки к отслеживанию"
+		"/add_tag - добавить тег к отслеживаемой ссылке\n" +
+		"/get_tags - вывести теги конкретной ссылки\n" +
+		"/delete_tag - удалить тег у отслеживаемой ссылки"
 	StartCommand              = "Добро пожаловать! Используйте /help, чтобы посмотреть доступные команды. Вы можете отслеживать источники."
 	StartCommandFailedChatAdd = "Добро пожаловать! Используйте /help, чтобы посмотреть доступные команды.\nК сожалению, не удалось предоставить вам возомжность отслеживания источников, попробуйте позже снова с помощью /start."
 	UnknownCommand            = "Неизвестная команда. Воспользуйтесь /help, чтобы посмотреть список доступных команд."
@@ -55,12 +60,25 @@ const (
 	ChatIDNotFound            = "Вам не предоставлена возможность отслеживать источники.\nПопробуйте /start."
 	UnknownText               = "Неопознанный текст. Воспользуйтесь /help для списка доступных команд."
 	InvalidURL                = "Невалидная ссылка, пожалуйста, попробуйте снова."
-	ValidURL                  = `Ссылка успешно принята, далее отправьте теги в формате "тег, тег, тег..." или "-" если без тегов`
+	ValidURL                  = `Ссылка успешно принята, далее отправьте теги без пробелов в формате "тег, тег, тег..." или "-" если без тегов`
+	InvalidTags               = `Теги не должны содержать пробелы. Отправьте теги снова в формате "тег, тег, тег..." или "-" если без тегов`
 	NotSupportedURL           = "Не поддерживаемый домен. На данный момент поддерживаются только github.com и stackoverflow.com"
+	AddTagUsage               = "Для добавления тега передайте ссылку и тег без пробелов (/add_tag https://github.com/user/repo backend)."
+	AddTagSucceeded           = "Тег успешно добавлен."
+	AddTagFailed              = "Произошла непредвиденная ошибка при добавлении тега.\nПопробуйте снова через некоторое время."
+	AddTagAlreadyExists       = "Такой тег уже привязан к ссылке."
+	DeleteTagUsage            = "Для удаления тега передайте ссылку и тег без пробелов (/delete_tag https://github.com/user/repo backend)."
+	DeleteTagSucceeded        = "Тег успешно удален."
+	DeleteTagFailed           = "Произошла непредвиденная ошибка при удалении тега.\nПопробуйте снова через некоторое время."
+	DeleteTagNotFound         = "Такой тег не найден у ссылки."
+	GetTagsUsage              = "Для просмотра тегов передайте ссылку (/get_tags https://github.com/user/repo)."
+	GetTagsFailed             = "Произошла непредвиденная ошибка при получении тегов.\nПопробуйте снова через некоторое время."
+	GetTagsEmpty              = "У ссылки нет тегов."
 )
 
 const (
 	LenOfToLongCommand = 30
+	URLAndTagArgsCount = 2
 )
 
 type App struct {
@@ -190,6 +208,9 @@ func (a *App) computeGotTags(ctx context.Context, chatID int64, text string) (tg
 	for i := range t {
 		tag := strings.TrimSpace(t[i])
 		if tag != "" {
+			if !isValidTag(tag) {
+				return tgbotapi.NewMessage(chatID, InvalidTags), TextInvalidTagGot
+			}
 			tags = append(tags, tag)
 		}
 	}
@@ -227,6 +248,12 @@ func (a *App) moderateCommand(ctx context.Context, command string, update tgbota
 		msg = a.computeUnTrack(ctx, update)
 	case "list":
 		msg = a.computeList(ctx, update)
+	case "add_tag":
+		msg = a.computeAddTag(ctx, update)
+	case "get_tags":
+		msg = a.computeGetTags(ctx, update)
+	case "delete_tag":
+		msg = a.computeDeleteTag(ctx, update)
 	case "cancel":
 		msg = a.computeCancel(chatID)
 	default:
@@ -328,6 +355,92 @@ func (a *App) computeCancel(chatID int64) tgbotapi.MessageConfig {
 	return tgbotapi.NewMessage(chatID, CancelCommand)
 }
 
+func (a *App) computeAddTag(ctx context.Context, update tgbotapi.Update) tgbotapi.MessageConfig {
+	return a.computeTagMutation(
+		ctx,
+		update,
+		AddTagUsage,
+		a.repo.AddTag,
+		ports.ErrTagAlreadyExists,
+		AddTagAlreadyExists,
+		AddTagFailed,
+		AddTagSucceeded,
+	)
+}
+
+func (a *App) computeGetTags(ctx context.Context, update tgbotapi.Update) tgbotapi.MessageConfig {
+	chatID := update.Message.Chat.ID
+	if a.stMachine.HasActiveState(chatID) {
+		a.stMachine.Reset(chatID)
+	}
+
+	urlArg, ok := parseURLArg(update.Message.CommandArguments())
+	if !ok {
+		return tgbotapi.NewMessage(chatID, GetTagsUsage)
+	}
+
+	tags, err := a.repo.GetTags(ctx, chatID, urlArg)
+	switch {
+	case errors.Is(err, ports.ErrChatNotFound):
+		return tgbotapi.NewMessage(chatID, ChatIDNotFound)
+	case errors.Is(err, ports.ErrLinkNotFound):
+		return tgbotapi.NewMessage(chatID, UntrackNotExistedURL)
+	case err != nil:
+		return tgbotapi.NewMessage(chatID, GetTagsFailed)
+	case len(tags) == 0:
+		return tgbotapi.NewMessage(chatID, GetTagsEmpty)
+	default:
+		return tgbotapi.NewMessage(chatID, tagsOutput(urlArg, tags))
+	}
+}
+
+func (a *App) computeDeleteTag(ctx context.Context, update tgbotapi.Update) tgbotapi.MessageConfig {
+	return a.computeTagMutation(
+		ctx,
+		update,
+		DeleteTagUsage,
+		a.repo.DeleteTag,
+		ports.ErrTagNotFound,
+		DeleteTagNotFound,
+		DeleteTagFailed,
+		DeleteTagSucceeded,
+	)
+}
+
+func (a *App) computeTagMutation(
+	ctx context.Context,
+	update tgbotapi.Update,
+	usageText string,
+	operation func(context.Context, int64, string, string) error,
+	expectedErr error,
+	expectedText string,
+	failedText string,
+	successText string,
+) tgbotapi.MessageConfig {
+	chatID := update.Message.Chat.ID
+	if a.stMachine.HasActiveState(chatID) {
+		a.stMachine.Reset(chatID)
+	}
+
+	urlArg, tagArg, ok := parseURLAndTagArgs(update.Message.CommandArguments())
+	if !ok {
+		return tgbotapi.NewMessage(chatID, usageText)
+	}
+
+	switch err := operation(ctx, chatID, urlArg, tagArg); {
+	case errors.Is(err, ports.ErrChatNotFound):
+		return tgbotapi.NewMessage(chatID, ChatIDNotFound)
+	case errors.Is(err, ports.ErrLinkNotFound):
+		return tgbotapi.NewMessage(chatID, UntrackNotExistedURL)
+	case errors.Is(err, expectedErr):
+		return tgbotapi.NewMessage(chatID, expectedText)
+	case err != nil:
+		return tgbotapi.NewMessage(chatID, failedText)
+	default:
+		return tgbotapi.NewMessage(chatID, successText)
+	}
+}
+
 func (a *App) computeUnknownCommand(chatID int64, command string) (tgbotapi.MessageConfig, string) {
 	if a.stMachine.HasActiveState(chatID) {
 		a.stMachine.Reset(chatID)
@@ -367,4 +480,48 @@ func linksOutput(links []domain.Link) string {
 	}
 
 	return text.String()
+}
+
+func tagsOutput(url string, tags []string) string {
+	var text strings.Builder
+	text.WriteString("Теги для ссылки:\n\n")
+	text.WriteString(url)
+	text.WriteString("\n\n")
+	for i, tag := range tags {
+		text.WriteString(strconv.Itoa(i + 1))
+		text.WriteString(". ")
+		text.WriteString(tag)
+		text.WriteString("\n")
+	}
+
+	return text.String()
+}
+
+func parseURLArg(raw string) (string, bool) {
+	args := strings.Fields(raw)
+	if len(args) != 1 {
+		return "", false
+	}
+
+	return args[0], true
+}
+
+func parseURLAndTagArgs(raw string) (string, string, bool) {
+	args := strings.Fields(raw)
+	if len(args) != URLAndTagArgsCount {
+		return "", "", false
+	}
+	if !isValidTag(args[1]) {
+		return "", "", false
+	}
+
+	return args[0], args[1], true
+}
+
+func isValidTag(tag string) bool {
+	if strings.TrimSpace(tag) == "" {
+		return false
+	}
+
+	return !strings.ContainsFunc(tag, unicode.IsSpace)
 }

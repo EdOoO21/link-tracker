@@ -22,6 +22,23 @@ message DeleteLinkRequest {
   string url = 2;
 }
 
+message AddTagRequest {
+  int64 chat_id = 1;
+  string url = 2;
+  string tag = 3;
+}
+
+message DeleteTagRequest {
+  int64 chat_id = 1;
+  string url = 2;
+  string tag = 3;
+}
+
+message GetTagsRequest {
+  int64 chat_id = 1;
+  string url = 2;
+}
+
 message ListLinksRequest {
   int64 chat_id = 1;
   repeated string tags = 2;
@@ -38,11 +55,18 @@ message ListLinksResponse {
   int32 size = 2;
 }
 
+message GetTagsResponse {
+  repeated string tags = 1;
+  int32 size = 2;
+}
+
 service ScrapperService {
   rpc AddChat(ChatRequest) returns (google.protobuf.Empty);
   rpc DeleteChat(ChatRequest) returns (google.protobuf.Empty);
   rpc AddLink(AddLinkRequest) returns (google.protobuf.Empty);
   rpc DeleteLink(DeleteLinkRequest) returns (google.protobuf.Empty);
+  rpc AddTag(AddTagRequest) returns (google.protobuf.Empty);
+  rpc DeleteTag(DeleteTagRequest) returns (google.protobuf.Empty);
+  rpc GetTags(GetTagsRequest) returns (GetTagsResponse);
   rpc ListLinks(ListLinksRequest) returns (ListLinksResponse);
 }
-

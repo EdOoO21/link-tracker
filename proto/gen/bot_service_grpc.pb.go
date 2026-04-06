@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v3.12.4
-// source: proto/bot_service.proto
+// source: bot_service.proto
 
 package linktrackerv1
 
@@ -118,5 +118,5 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/bot_service.proto",
+	Metadata: "bot_service.proto",
 }

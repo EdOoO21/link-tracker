@@ -24,7 +24,7 @@ func (r *Repository) UnTrackLink(ctx context.Context, chatID int64, url string) 
 
 	present, err := isPresent(ctx, tx, chatID)
 	if err != nil {
-		return fmt.Errorf("check chat presence: %w", err)
+		return fmt.Errorf("check chat existance: %w", err)
 	}
 	if !present {
 		return ports.ErrChatNotFound
@@ -162,18 +162,12 @@ func (r *Repository) deleteSubscription(ctx context.Context, tx pgx.Tx, chatID, 
 }
 
 func (r *Repository) deleteUnusedLink(ctx context.Context, tx pgx.Tx, linkID int64) error {
-	subquery := dialect.
-		From("chat_links").
-		Prepared(true).
-		Select(goqu.V(1)).
-		Where(goqu.C("link_id").Eq(linkID))
-
 	ds := dialect.
 		Delete("links").
 		Prepared(true).
 		Where(
 			goqu.C("id").Eq(linkID),
-			goqu.L("NOT EXISTS (?)", subquery),
+			goqu.L("NOT EXISTS (SELECT 1 FROM chat_links WHERE link_id = ?)", linkID),
 		)
 
 	sql, args, err := buildSQL(ds)
@@ -189,18 +183,12 @@ func (r *Repository) deleteUnusedLink(ctx context.Context, tx pgx.Tx, linkID int
 }
 
 func (r *Repository) deleteUnusedTag(ctx context.Context, tx pgx.Tx, tagID int64) error {
-	subquery := dialect.
-		From("link_tags").
-		Prepared(true).
-		Select(goqu.V(1)).
-		Where(goqu.C("tag_id").Eq(tagID))
-
 	ds := dialect.
 		Delete("tags").
 		Prepared(true).
 		Where(
 			goqu.C("id").Eq(tagID),
-			goqu.L("NOT EXISTS (?)", subquery),
+			goqu.L("NOT EXISTS (SELECT 1 FROM link_tags WHERE tag_id = ?)", tagID),
 		)
 
 	sql, args, err := buildSQL(ds)
