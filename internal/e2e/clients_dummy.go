@@ -18,8 +18,12 @@ func NewGitHubClient() *GitHubClient {
 	return &GitHubClient{parser: githubclient.NewGitHubClient()}
 }
 
-func (c *GitHubClient) GetRepoUpdate(_ context.Context, _, _ string) (ports.ResourceUpdate, error) {
-	return ports.ResourceUpdate{LastUpdate: time.Now().UTC().Add(time.Second)}, nil
+func (c *GitHubClient) GetRepoUpdate(_ context.Context, _, _ string, _ time.Time) (ports.ResourceUpdate, error) {
+	return ports.ResourceUpdate{
+		HasUpdate:  true,
+		LastUpdate: time.Now().UTC().Add(time.Second),
+		Message:    "Обнаружено тестовое GitHub обновление.",
+	}, nil
 }
 
 func (c *GitHubClient) ParseGitHubURL(url string) (owner, repo string, err error) {
@@ -38,8 +42,12 @@ func NewStackOverflowClient() *StackOverflowClient {
 	return &StackOverflowClient{parser: stackoverflowclient.NewStackOverflowClient()}
 }
 
-func (c *StackOverflowClient) GetQuestionUpdate(_ context.Context, _ string) (ports.ResourceUpdate, error) {
-	return ports.ResourceUpdate{LastUpdate: time.Now().UTC().Add(time.Second)}, nil
+func (c *StackOverflowClient) GetQuestionUpdate(_ context.Context, _ string, _ time.Time) (ports.ResourceUpdate, error) {
+	return ports.ResourceUpdate{
+		HasUpdate:  true,
+		LastUpdate: time.Now().UTC().Add(time.Second),
+		Message:    "Обнаружено тестовое StackOverflow обновление.",
+	}, nil
 }
 
 func (c *StackOverflowClient) ParseStackOverflowURL(url string) (string, error) {

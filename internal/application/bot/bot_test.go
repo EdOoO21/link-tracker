@@ -22,6 +22,8 @@ func TestComputeGotLink(t *testing.T) {
 	}{
 		{name: "invalid url", input: "tbank://github.com/user/repo", wantText: InvalidURL, wantCommand: TextInvalidLinkGot, wantState: TrackCommandGot},
 		{name: "unsupported domain", input: "https://google.com", wantText: NotSupportedURL, wantCommand: TextNotSupportedLinkGot, wantState: TrackCommandGot},
+		{name: "unsupported github shape", input: "https://github.com/user", wantText: InvalidURL, wantCommand: TextInvalidLinkGot, wantState: TrackCommandGot},
+		{name: "unsupported stackoverflow shape", input: "https://stackoverflow.com/users/123", wantText: InvalidURL, wantCommand: TextInvalidLinkGot, wantState: TrackCommandGot},
 		{name: "already tracked", input: "https://github.com/user/repo", linkExists: true, wantText: TrackExistedURLNoReset, wantCommand: URLExists, wantState: TrackCommandGot},
 		{name: "valid github url", input: "https://github.com/user/repo", wantText: ValidURL, wantCommand: TextValidLinkGot, wantState: LinkGot, wantStoredURL: "https://github.com/user/repo"},
 	}

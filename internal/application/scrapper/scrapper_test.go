@@ -139,11 +139,13 @@ type stubGithub struct {
 	updateErr error
 	gotOwner  string
 	gotRepo   string
+	gotSince  time.Time
 }
 
-func (s *stubGithub) GetRepoUpdate(_ context.Context, owner, repo string) (ports.ResourceUpdate, error) {
+func (s *stubGithub) GetRepoUpdate(_ context.Context, owner, repo string, since time.Time) (ports.ResourceUpdate, error) {
 	s.gotOwner = owner
 	s.gotRepo = repo
+	s.gotSince = since
 	return s.update, s.updateErr
 }
 
@@ -160,10 +162,12 @@ type stubStackOverflow struct {
 	update     ports.ResourceUpdate
 	updateErr  error
 	gotID      string
+	gotSince   time.Time
 }
 
-func (s *stubStackOverflow) GetQuestionUpdate(_ context.Context, questionID string) (ports.ResourceUpdate, error) {
+func (s *stubStackOverflow) GetQuestionUpdate(_ context.Context, questionID string, since time.Time) (ports.ResourceUpdate, error) {
 	s.gotID = questionID
+	s.gotSince = since
 	return s.update, s.updateErr
 }
 
@@ -298,17 +302,19 @@ func TestGetResourceUpdate(t *testing.T) {
 		name          string
 		github        *stubGithub
 		stackoverflow *stubStackOverflow
-		wantDesc      string
 		wantErr       error
 	}{
-		{name: "github update", github: &stubGithub{owner: "user", repo: "repo", update: ports.ResourceUpdate{LastUpdate: updatedAt}}, stackoverflow: &stubStackOverflow{parseErr: errors.New("nope")}, wantDesc: "Обнаружено обновление GitHub репозитория."},
-		{name: "stackoverflow update", github: &stubGithub{parseErr: errors.New("nope")}, stackoverflow: &stubStackOverflow{questionID: "123", update: ports.ResourceUpdate{LastUpdate: updatedAt}}, wantDesc: "Обнаружено обновление вопроса StackOverflow."},
+		{name: "github update", github: &stubGithub{owner: "user", repo: "repo", update: ports.ResourceUpdate{HasUpdate: true, LastUpdate: updatedAt, Message: "github message"}}, stackoverflow: &stubStackOverflow{parseErr: errors.New("nope")}},
+		{name: "stackoverflow update", github: &stubGithub{parseErr: errors.New("nope")}, stackoverflow: &stubStackOverflow{questionID: "123", update: ports.ResourceUpdate{HasUpdate: true, LastUpdate: updatedAt, Message: "stack message"}}},
 		{name: "unsupported link", github: &stubGithub{parseErr: errors.New("nope")}, stackoverflow: &stubStackOverflow{parseErr: errors.New("nope")}, wantErr: ports.ErrLinkNotFound},
 	}
 	ctx := context.Background()
 	for _, tt := range tests {
 		svc := NewScrapper(noopLogger{}, &stubRepo{}, &stubBotClient{}, tt.github, tt.stackoverflow)
-		update, desc, err := svc.getResourceUpdate(ctx, "https://example.com")
+		update, err := svc.getResourceUpdate(ctx, models.TrackedLink{
+			URL:        "https://example.com",
+			LastUpdate: updatedAt.Add(-time.Minute),
+		})
 		if tt.wantErr != nil {
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("case %q: got err %v, want %v", tt.name, err, tt.wantErr)
@@ -318,11 +324,14 @@ func TestGetResourceUpdate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("case %q: unexpected error %v", tt.name, err)
 		}
-		if desc != tt.wantDesc {
-			t.Fatalf("case %q: got desc %q, want %q", tt.name, desc, tt.wantDesc)
-		}
 		if !update.LastUpdate.Equal(updatedAt) {
 			t.Fatalf("case %q: got update %v, want %v", tt.name, update.LastUpdate, updatedAt)
+		}
+		if tt.github != nil && tt.github.parseErr == nil && !tt.github.gotSince.Equal(updatedAt.Add(-time.Minute)) {
+			t.Fatalf("case %q: got github since %v", tt.name, tt.github.gotSince)
+		}
+		if tt.stackoverflow != nil && tt.stackoverflow.parseErr == nil && !tt.stackoverflow.gotSince.Equal(updatedAt.Add(-time.Minute)) {
+			t.Fatalf("case %q: got stackoverflow since %v", tt.name, tt.stackoverflow.gotSince)
 		}
 	}
 }
@@ -339,7 +348,15 @@ func TestCheckLinks(t *testing.T) {
 		}},
 	}
 	botClient := &stubBotClient{}
-	github := &stubGithub{owner: "user", repo: "repo", update: ports.ResourceUpdate{LastUpdate: newTime}}
+	github := &stubGithub{
+		owner: "user",
+		repo:  "repo",
+		update: ports.ResourceUpdate{
+			HasUpdate:  true,
+			LastUpdate: newTime,
+			Message:    "github message",
+		},
+	}
 	stack := &stubStackOverflow{parseErr: errors.New("nope")}
 	svc := NewScrapper(noopLogger{}, repo, botClient, github, stack)
 
@@ -351,7 +368,7 @@ func TestCheckLinks(t *testing.T) {
 	if botClient.got.url != "https://github.com/user/repo" {
 		t.Fatalf("got url %q", botClient.got.url)
 	}
-	if botClient.got.description != "Обнаружено обновление GitHub репозитория." {
+	if botClient.got.description != "github message" {
 		t.Fatalf("got desc %q", botClient.got.description)
 	}
 	if repo.updated.linkID != 42 || !repo.updated.lastUpdate.Equal(newTime) {
@@ -370,7 +387,15 @@ func TestCheckLinksSkipsWhenNothingChanged(t *testing.T) {
 		}},
 	}
 	botClient := &stubBotClient{}
-	github := &stubGithub{owner: "user", repo: "repo", update: ports.ResourceUpdate{LastUpdate: current}}
+	github := &stubGithub{
+		owner: "user",
+		repo:  "repo",
+		update: ports.ResourceUpdate{
+			HasUpdate:  false,
+			LastUpdate: current,
+			Message:    "",
+		},
+	}
 	svc := NewScrapper(noopLogger{}, repo, botClient, github, &stubStackOverflow{parseErr: errors.New("nope")})
 
 	svc.CheckLinks(context.Background())

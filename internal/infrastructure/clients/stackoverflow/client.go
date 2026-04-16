@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,35 +31,27 @@ func NewStackOverflowClient() *Client {
 	}
 }
 
-func (c *Client) GetQuestionUpdate(ctx context.Context, questionID string) (ports.ResourceUpdate, error) {
-	endpoint := c.baseURL + "/questions/" + questionID + "?site=stackoverflow"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+func (c *Client) GetQuestionUpdate(ctx context.Context, questionID string, since time.Time) (ports.ResourceUpdate, error) {
+	title, err := c.fetchQuestionTitle(ctx, questionID)
 	if err != nil {
-		return ports.ResourceUpdate{}, fmt.Errorf("create request: %w", err)
+		return ports.ResourceUpdate{}, err
 	}
 
-	resp, err := c.client.Do(req)
+	answers, err := c.fetchAnswers(ctx, questionID)
 	if err != nil {
-		return ports.ResourceUpdate{}, fmt.Errorf("send request: %w", err)
-	}
-	defer closeResponseBody(resp)
-
-	if resp.StatusCode != http.StatusOK {
-		return ports.ResourceUpdate{}, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+		return ports.ResourceUpdate{}, err
 	}
 
-	var data stackOverflowQuestionResponse
-	if decodeErr := json.NewDecoder(resp.Body).Decode(&data); decodeErr != nil {
-		return ports.ResourceUpdate{}, fmt.Errorf("decode response: %w", decodeErr)
-	}
-	if len(data.Items) == 0 {
-		return ports.ResourceUpdate{}, errors.New("question not found")
+	comments, err := c.fetchComments(ctx, questionID)
+	if err != nil {
+		return ports.ResourceUpdate{}, err
 	}
 
-	return ports.ResourceUpdate{
-		LastUpdate: time.Unix(data.Items[0].LastActivityDate, 0),
-	}, nil
+	return stackOverflowUpdatesResponse{
+		Title:    title,
+		Answers:  answers,
+		Comments: comments,
+	}.toResourceUpdate(since), nil
 }
 
 func (c *Client) ParseStackOverflowURL(raw string) (string, error) {
@@ -80,4 +73,85 @@ func (c *Client) ParseStackOverflowURL(raw string) (string, error) {
 
 func closeResponseBody(resp *http.Response) {
 	_ = resp.Body.Close()
+}
+
+func (c *Client) fetchQuestionTitle(ctx context.Context, questionID string) (string, error) {
+	endpoint := c.baseURL + "/questions/" + questionID + "?site=stackoverflow"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("send request: %w", err)
+	}
+	defer closeResponseBody(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	var data stackOverflowQuestionResponse
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&data); decodeErr != nil {
+		return "", fmt.Errorf("decode response: %w", decodeErr)
+	}
+	if len(data.Items) == 0 {
+		return "", errors.New("question not found")
+	}
+
+	return data.Items[0].Title, nil
+}
+
+func (c *Client) fetchAnswers(ctx context.Context, questionID string) ([]stackOverflowAnswer, error) {
+	data, err := fetchQuestionItems[stackOverflowAnswersResponse](ctx, c, questionID, "answers")
+	if err != nil {
+		return nil, err
+	}
+
+	return data.Items, nil
+}
+
+func (c *Client) fetchComments(ctx context.Context, questionID string) ([]stackOverflowComment, error) {
+	data, err := fetchQuestionItems[stackOverflowCommentsResponse](ctx, c, questionID, "comments")
+	if err != nil {
+		return nil, err
+	}
+
+	return data.Items, nil
+}
+
+func fetchQuestionItems[T any](ctx context.Context, client *Client, questionID, resource string) (T, error) {
+	var data T
+
+	endpoint := client.baseURL + "/questions/" + questionID + "/" + resource
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return data, fmt.Errorf("create request: %w", err)
+	}
+
+	query := req.URL.Query()
+	query.Set("site", "stackoverflow")
+	query.Set("sort", "creation")
+	query.Set("order", "desc")
+	query.Set("pagesize", strconv.Itoa(itemsPerTypePageLimit))
+	query.Set("filter", "withbody")
+	req.URL.RawQuery = query.Encode()
+
+	resp, err := client.client.Do(req)
+	if err != nil {
+		return data, fmt.Errorf("send request: %w", err)
+	}
+	defer closeResponseBody(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return data, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&data); decodeErr != nil {
+		return data, fmt.Errorf("decode response: %w", decodeErr)
+	}
+
+	return data, nil
 }

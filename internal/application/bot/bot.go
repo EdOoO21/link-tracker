@@ -17,6 +17,8 @@ import (
 	settings "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/settings/bot"
 )
 
+var errUnsupportedTrackedLink = errors.New("unsupported tracked link")
+
 const (
 	Unknown                  = "unknown"
 	NotCommand               = "not a command"
@@ -42,9 +44,8 @@ const (
 	StartCommand              = "Добро пожаловать! Используйте /help, чтобы посмотреть доступные команды. Вы можете отслеживать источники."
 	StartCommandFailedChatAdd = "Добро пожаловать! Используйте /help, чтобы посмотреть доступные команды.\nК сожалению, не удалось предоставить вам возомжность отслеживания источников, попробуйте позже снова с помощью /start."
 	UnknownCommand            = "Неизвестная команда. Воспользуйтесь /help, чтобы посмотреть список доступных команд."
-	AddingToTrackSeqStarted   = "Введите корректный URL источника: "
-	AddingToTrackSeqRestarted = "Процесс добавления источника начинается заново, введите корректный URL источника: "
-	TrackNoURL                = "Для того, чтобы начать отслеживание ссылки, пожалуйста, передайте ссылку в качестве параметра (/track google.com)."
+	AddingToTrackSeqStarted   = "Введите URL источника: GitHub-репозиторий вида https://github.com/owner/repo или вопрос StackOverflow вида https://stackoverflow.com/questions/123/title"
+	AddingToTrackSeqRestarted = "Процесс добавления источника начинается заново. Введите GitHub-репозиторий вида https://github.com/owner/repo или вопрос StackOverflow вида https://stackoverflow.com/questions/123/title"
 	TrackExistedURLWithReset  = "Ссылка уже отслеживается, процесс завершен неудачно."
 	TrackExistedURLNoReset    = "Ссылка уже отслеживается, попробуйте отправить новую ссылку снова."
 	TrackNotExistedURL        = "Ссылка успешно добавлена к отслеживанию."
@@ -59,10 +60,10 @@ const (
 	CancelCommandNothingGot   = "Нечего отменять: процесс добавления ссылки не был запущен или был прерван ранее другой командой. Используйте /help для описания команд."
 	ChatIDNotFound            = "Вам не предоставлена возможность отслеживать источники.\nПопробуйте /start."
 	UnknownText               = "Неопознанный текст. Воспользуйтесь /help для списка доступных команд."
-	InvalidURL                = "Невалидная ссылка, пожалуйста, попробуйте снова."
+	InvalidURL                = "Невалидная ссылка. Поддерживаются только GitHub-репозиторий вида https://github.com/owner/repo и вопрос StackOverflow вида https://stackoverflow.com/questions/123/title."
 	ValidURL                  = `Ссылка успешно принята, далее отправьте теги без пробелов в формате "тег, тег, тег..." или "-" если без тегов`
 	InvalidTags               = `Теги не должны содержать пробелы. Отправьте теги снова в формате "тег, тег, тег..." или "-" если без тегов`
-	NotSupportedURL           = "Не поддерживаемый домен. На данный момент поддерживаются только github.com и stackoverflow.com"
+	NotSupportedURL           = "Не поддерживаемый домен. На данный момент поддерживаются только GitHub-репозитории на github.com и вопросы StackOverflow на stackoverflow.com."
 	AddTagUsage               = "Для добавления тега передайте ссылку и тег без пробелов (/add_tag https://github.com/user/repo backend)."
 	AddTagSucceeded           = "Тег успешно добавлен."
 	AddTagFailed              = "Произошла непредвиденная ошибка при добавлении тега.\nПопробуйте снова через некоторое время."
@@ -181,17 +182,17 @@ func (a *App) computeText(ctx context.Context, chatID int64, text string) (tgbot
 }
 
 func (a *App) computeGotLink(ctx context.Context, chatID int64, text string) (tgbotapi.MessageConfig, string) {
-	u, err := url.ParseRequestURI(text)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	link, err := validateTrackedLink(text)
+	switch {
+	case errors.Is(err, errUnsupportedTrackedLink):
+		return tgbotapi.NewMessage(chatID, NotSupportedURL), TextNotSupportedLinkGot
+	case err != nil:
 		return tgbotapi.NewMessage(chatID, InvalidURL), TextInvalidLinkGot
 	}
-	if u.Host != "github.com" && u.Host != "stackoverflow.com" {
-		return tgbotapi.NewMessage(chatID, NotSupportedURL), TextNotSupportedLinkGot
-	}
-	if a.repo.IsLinkPresent(ctx, chatID, u.String()) {
+	if a.repo.IsLinkPresent(ctx, chatID, link) {
 		return tgbotapi.NewMessage(chatID, TrackExistedURLNoReset), URLExists
 	}
-	a.stMachine.State(chatID).URL = u.String()
+	a.stMachine.State(chatID).URL = link
 	a.stMachine.State(chatID).State = LinkGot
 
 	return tgbotapi.NewMessage(chatID, ValidURL), TextValidLinkGot
@@ -524,4 +525,43 @@ func isValidTag(tag string) bool {
 	}
 
 	return !strings.ContainsFunc(tag, unicode.IsSpace)
+}
+
+func validateTrackedLink(raw string) (string, error) {
+	u, err := url.ParseRequestURI(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return "", errors.New("invalid url")
+	}
+
+	switch u.Host {
+	case "github.com":
+		if !isValidGitHubRepoURL(u) {
+			return "", errors.New("invalid github repo url")
+		}
+	case "stackoverflow.com":
+		if !isValidStackOverflowQuestionURL(u) {
+			return "", errors.New("invalid stackoverflow question url")
+		}
+	default:
+		return "", errUnsupportedTrackedLink
+	}
+
+	u.Fragment = ""
+
+	return u.String(), nil
+}
+
+func isValidGitHubRepoURL(u *url.URL) bool {
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	return len(parts) == 2 && parts[0] != "" && parts[1] != ""
+}
+
+func isValidStackOverflowQuestionURL(u *url.URL) bool {
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 2 || parts[0] != "questions" || parts[1] == "" {
+		return false
+	}
+
+	_, err := strconv.ParseInt(parts[1], 10, 64)
+	return err == nil
 }

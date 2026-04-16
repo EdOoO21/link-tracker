@@ -76,20 +76,20 @@ func (s *Scrapper) CheckLinks(ctx context.Context) {
 	for _, link := range allLinks {
 		s.logger.Info("checking link update", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate)
 
-		update, description, updateErr := s.getResourceUpdate(ctx, link.URL)
+		update, updateErr := s.getResourceUpdate(ctx, link)
 		if updateErr != nil {
 			s.logger.Warn("failed to get resource update", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", updateErr)
 			continue
 		}
 
-		if !update.LastUpdate.After(link.LastUpdate) {
-			s.logger.Info("no link updates detected", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate, "actualLastUpdate", update.LastUpdate)
+		if !update.HasUpdate {
+			s.logger.Info("no link updates detected", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate)
 			continue
 		}
 
 		s.logger.Info("new link update detected", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate, "actualLastUpdate", update.LastUpdate)
 
-		if err = s.botClient.SendUpdates(ctx, link.ChatIDs, link.URL, description); err != nil {
+		if err = s.botClient.SendUpdates(ctx, link.ChatIDs, link.URL, update.Message); err != nil {
 			s.logger.Error("failed to send update notification", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", err)
 			continue
 		}
@@ -243,28 +243,28 @@ func (s *Scrapper) DeleteChat(ctx context.Context, chatID int64) error {
 	return nil
 }
 
-func (s *Scrapper) getResourceUpdate(ctx context.Context, rawURL string) (ports.ResourceUpdate, string, error) {
-	if owner, repo, parseErr := s.sources.Github.ParseGitHubURL(rawURL); parseErr == nil {
-		s.logger.Info("resolved link source", "url", rawURL, "source", "github", "owner", owner, "repo", repo)
-		update, updateErr := s.sources.Github.GetRepoUpdate(ctx, owner, repo)
+func (s *Scrapper) getResourceUpdate(ctx context.Context, link models.TrackedLink) (ports.ResourceUpdate, error) {
+	if owner, repo, parseErr := s.sources.Github.ParseGitHubURL(link.URL); parseErr == nil {
+		s.logger.Info("resolved link source", "url", link.URL, "source", "github", "owner", owner, "repo", repo, "since", link.LastUpdate)
+		update, updateErr := s.sources.Github.GetRepoUpdate(ctx, owner, repo, link.LastUpdate)
 		if updateErr != nil {
-			return ports.ResourceUpdate{}, "", fmt.Errorf("get github update: %w", updateErr)
+			return ports.ResourceUpdate{}, fmt.Errorf("get github update: %w", updateErr)
 		}
-		s.logger.Info("fetched github resource update", "url", rawURL, "lastUpdate", update.LastUpdate)
-		return update, "Обнаружено обновление GitHub репозитория.", nil
+		s.logger.Info("fetched github resource update", "url", link.URL, "lastUpdate", update.LastUpdate)
+		return update, nil
 	}
 
-	if questionID, parseErr := s.sources.StackOverflow.ParseStackOverflowURL(rawURL); parseErr == nil {
-		s.logger.Info("resolved link source", "url", rawURL, "source", "stackoverflow", "questionID", questionID)
-		update, updateErr := s.sources.StackOverflow.GetQuestionUpdate(ctx, questionID)
+	if questionID, parseErr := s.sources.StackOverflow.ParseStackOverflowURL(link.URL); parseErr == nil {
+		s.logger.Info("resolved link source", "url", link.URL, "source", "stackoverflow", "questionID", questionID, "since", link.LastUpdate)
+		update, updateErr := s.sources.StackOverflow.GetQuestionUpdate(ctx, questionID, link.LastUpdate)
 		if updateErr != nil {
-			return ports.ResourceUpdate{}, "", fmt.Errorf("get stackoverflow update: %w", updateErr)
+			return ports.ResourceUpdate{}, fmt.Errorf("get stackoverflow update: %w", updateErr)
 		}
-		s.logger.Info("fetched stackoverflow resource update", "url", rawURL, "lastUpdate", update.LastUpdate)
-		return update, "Обнаружено обновление вопроса StackOverflow.", nil
+		s.logger.Info("fetched stackoverflow resource update", "url", link.URL, "lastUpdate", update.LastUpdate)
+		return update, nil
 	}
 
-	return ports.ResourceUpdate{}, "", ports.ErrLinkNotFound
+	return ports.ResourceUpdate{}, ports.ErrLinkNotFound
 }
 
 func (s *Scrapper) mutateTag(

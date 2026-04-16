@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 const (
 	requestTimeout  = 5 * time.Second
 	minRepoPathPart = 2
+	perPageLimit    = 10
 )
 
 type Client struct {
@@ -30,13 +32,19 @@ func NewGitHubClient() *Client {
 	}
 }
 
-func (c *Client) GetRepoUpdate(ctx context.Context, owner, repo string) (ports.ResourceUpdate, error) {
-	endpoint := c.baseURL + "/repos/" + owner + "/" + repo
+func (c *Client) GetRepoUpdate(ctx context.Context, owner, repo string, since time.Time) (ports.ResourceUpdate, error) {
+	endpoint := c.baseURL + "/repos/" + owner + "/" + repo + "/issues"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return ports.ResourceUpdate{}, fmt.Errorf("create request: %w", err)
 	}
+	query := req.URL.Query()
+	query.Set("state", "all")
+	query.Set("sort", "created")
+	query.Set("direction", "desc")
+	query.Set("per_page", strconv.Itoa(perPageLimit))
+	req.URL.RawQuery = query.Encode()
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := c.client.Do(req)
@@ -49,17 +57,12 @@ func (c *Client) GetRepoUpdate(ctx context.Context, owner, repo string) (ports.R
 		return ports.ResourceUpdate{}, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	var data githubRepoResponse
+	var data githubIssuesResponse
 	if decodeErr := json.NewDecoder(resp.Body).Decode(&data); decodeErr != nil {
 		return ports.ResourceUpdate{}, fmt.Errorf("decode response: %w", decodeErr)
 	}
 
-	last := data.PushedAt
-	if data.UpdatedAt.After(last) {
-		last = data.UpdatedAt
-	}
-
-	return ports.ResourceUpdate{LastUpdate: last}, nil
+	return data.toResourceUpdate(since), nil
 }
 
 func (c *Client) ParseGitHubURL(raw string) (owner, repo string, err error) {
