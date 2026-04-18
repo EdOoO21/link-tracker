@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	previewLimit          = 50
+	previewLimit          = 200
 	itemsPerTypePageLimit = 5
 )
 

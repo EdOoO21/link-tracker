@@ -23,17 +23,24 @@ type Scrapper struct {
 	logger    ports.Logger
 	sources   Sources
 	botClient scrapperinterfaces.BotClient
+	batchSize int
 }
 
 func NewScrapper(logger ports.Logger,
 	repo scrapperinterfaces.Repository,
 	botClient scrapperinterfaces.BotClient,
 	github scrapperinterfaces.GithubUpdates,
-	stackOverflow scrapperinterfaces.StackOverflowUpdates) *Scrapper {
+	stackOverflow scrapperinterfaces.StackOverflowUpdates,
+	batchSize int) *Scrapper {
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+
 	return &Scrapper{
 		repo:      repo,
 		logger:    logger,
 		botClient: botClient,
+		batchSize: batchSize,
 		sources: Sources{
 			Github:        github,
 			StackOverflow: stackOverflow,
@@ -61,49 +68,63 @@ func (s *Scrapper) RunCron(ctx context.Context, interval time.Duration) {
 }
 
 func (s *Scrapper) CheckLinks(ctx context.Context) {
-	allLinks, err := s.repo.ListAllLinks(ctx)
-	if err != nil {
-		s.logger.Error("failed to load tracked links", "error", err)
-		return
+	var (
+		afterLinkID        int64
+		totalLinks         int
+		totalSubscriptions int
+	)
+
+	s.logger.Info("scrapper links scan started", "batchSize", s.batchSize)
+
+	for {
+		batch, err := s.repo.ListAllLinksBatch(ctx, afterLinkID, s.batchSize)
+		if err != nil {
+			s.logger.Error("failed to load tracked links batch", "afterLinkID", afterLinkID, "batchSize", s.batchSize, "error", err)
+			return
+		}
+
+		if len(batch) == 0 {
+			break
+		}
+
+		s.logger.Info("scrapper links batch loaded", "afterLinkID", afterLinkID, "batchSize", s.batchSize, "uniqueLinks", len(batch))
+
+		for _, link := range batch {
+			totalLinks++
+			totalSubscriptions += len(link.ChatIDs)
+			s.logger.Info("checking link update", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate)
+
+			update, updateErr := s.getResourceUpdate(ctx, link)
+			if updateErr != nil {
+				s.logger.Warn("failed to get resource update", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", updateErr)
+				continue
+			}
+
+			if !update.HasUpdate {
+				s.logger.Info("no link updates detected", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate)
+				continue
+			}
+
+			s.logger.Info("new link update detected", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate, "actualLastUpdate", update.LastUpdate)
+
+			if err = s.botClient.SendUpdates(ctx, link.ChatIDs, link.URL, update.Message); err != nil {
+				s.logger.Error("failed to send update notification", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", err)
+				continue
+			}
+			s.logger.Info("update notification sent", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL)
+
+			if err = s.repo.UpdateLinksLastUpdate(ctx, link.LinkID, update.LastUpdate); err != nil {
+				s.logger.Error("failed to update last update time", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", err)
+				continue
+			}
+
+			s.logger.Info("link update processed", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "previousLastUpdate", link.LastUpdate, "newLastUpdate", update.LastUpdate)
+		}
+
+		afterLinkID = batch[len(batch)-1].LinkID
 	}
-	totalSubscriptions := 0
-	for _, link := range allLinks {
-		totalSubscriptions += len(link.ChatIDs)
-	}
 
-	s.logger.Info("scrapper links scan started", "uniqueLinks", len(allLinks), "subscriptions", totalSubscriptions)
-
-	for _, link := range allLinks {
-		s.logger.Info("checking link update", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate)
-
-		update, updateErr := s.getResourceUpdate(ctx, link)
-		if updateErr != nil {
-			s.logger.Warn("failed to get resource update", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", updateErr)
-			continue
-		}
-
-		if !update.HasUpdate {
-			s.logger.Info("no link updates detected", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate)
-			continue
-		}
-
-		s.logger.Info("new link update detected", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "lastKnownUpdate", link.LastUpdate, "actualLastUpdate", update.LastUpdate)
-
-		if err = s.botClient.SendUpdates(ctx, link.ChatIDs, link.URL, update.Message); err != nil {
-			s.logger.Error("failed to send update notification", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", err)
-			continue
-		}
-		s.logger.Info("update notification sent", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL)
-
-		if err = s.repo.UpdateLinksLastUpdate(ctx, link.LinkID, update.LastUpdate); err != nil {
-			s.logger.Error("failed to update last update time", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", err)
-			continue
-		}
-
-		s.logger.Info("link update processed", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "previousLastUpdate", link.LastUpdate, "newLastUpdate", update.LastUpdate)
-	}
-
-	s.logger.Info("scrapper links scan finished", "uniqueLinks", len(allLinks), "subscriptions", totalSubscriptions)
+	s.logger.Info("scrapper links scan finished", "uniqueLinks", totalLinks, "subscriptions", totalSubscriptions)
 }
 
 func (s *Scrapper) AddLink(ctx context.Context, link models.AddLink) error {

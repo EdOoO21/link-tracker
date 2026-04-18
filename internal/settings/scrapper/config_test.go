@@ -82,6 +82,9 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.DB.AccessType != "sql" {
 		t.Fatalf("got access type %q", cfg.DB.AccessType)
 	}
+	if cfg.BatchSize != 100 {
+		t.Fatalf("got batch size %d, want 100", cfg.BatchSize)
+	}
 }
 
 func TestLoadConfigReturnsBotURLError(t *testing.T) {
@@ -95,5 +98,38 @@ func TestLoadConfigReturnsBotURLError(t *testing.T) {
 	_, err := LoadConfig()
 	if !errors.Is(err, ErrBotURLEmpty) {
 		t.Fatalf("got err %v, want %v", err, ErrBotURLEmpty)
+	}
+}
+
+func TestLoadConfigUsesConfiguredBatchSize(t *testing.T) {
+	t.Setenv("APP_BOT_BASE_URL", "http://localhost:9090")
+	t.Setenv("APP_SCRAPPER_BASE_URL", "http://localhost:9080")
+	t.Setenv("APP_DATABASE_URL", "postgres://localhost:5432/linktracker")
+	t.Setenv("APP_DATABASE_USER", "postgres")
+	t.Setenv("APP_DATABASE_PASSWORD", "postgres")
+	t.Setenv("APP_DATABASE_ACCESS_TYPE", "sql")
+	t.Setenv("APP_SCRAPPER_BATCH_SIZE", "250")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.BatchSize != 250 {
+		t.Fatalf("got batch size %d, want 250", cfg.BatchSize)
+	}
+}
+
+func TestLoadConfigReturnsBatchSizeError(t *testing.T) {
+	t.Setenv("APP_BOT_BASE_URL", "http://localhost:9090")
+	t.Setenv("APP_SCRAPPER_BASE_URL", "http://localhost:9080")
+	t.Setenv("APP_DATABASE_URL", "postgres://localhost:5432/linktracker")
+	t.Setenv("APP_DATABASE_USER", "postgres")
+	t.Setenv("APP_DATABASE_PASSWORD", "postgres")
+	t.Setenv("APP_DATABASE_ACCESS_TYPE", "sql")
+	t.Setenv("APP_SCRAPPER_BATCH_SIZE", "0")
+
+	_, err := LoadConfig()
+	if !errors.Is(err, ErrBatchSizeInvalid) {
+		t.Fatalf("got err %v, want %v", err, ErrBatchSizeInvalid)
 	}
 }

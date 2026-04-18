@@ -24,7 +24,7 @@ type githubUserResponse struct {
 
 type githubPullResponse struct{}
 
-const previewLimit = 50
+const previewLimit = 200
 
 func (r githubIssuesResponse) toResourceUpdate(since time.Time) ports.ResourceUpdate {
 	newIssues := r.newerThan(since)
