@@ -16,7 +16,7 @@ type Repository interface {
 	DeleteTag(ctx context.Context, chatID int64, url, tag string) error
 	GetTags(ctx context.Context, chatID int64, url string) ([]string, error)
 
-	ListAllLinks(ctx context.Context) ([]models.TrackedLink, error)
+	ListAllLinksBatch(ctx context.Context, afterLinkID int64, limit int) ([]models.TrackedLink, error)
 	UpdateLinksLastUpdate(ctx context.Context, linkID int64, lastUpdate time.Time) error
 
 	IsPresent(ctx context.Context, chatID int64) (bool, error)

@@ -8,21 +8,32 @@ import (
 	models "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/models"
 )
 
-func (r *Repository) ListAllLinks(ctx context.Context) ([]models.TrackedLink, error) {
+func (r *Repository) ListAllLinksBatch(ctx context.Context, afterLinkID int64, limit int) ([]models.TrackedLink, error) {
+	if limit <= 0 {
+		return []models.TrackedLink{}, nil
+	}
+
 	const query = `
-		SELECT l.id, l.url, l.last_update, cl.chat_id
-		FROM links l
-		INNER JOIN chat_links cl ON cl.link_id = l.id
-		ORDER BY l.id, cl.chat_id
+		WITH batch_links AS (
+			SELECT l.id, l.url, l.last_update
+			FROM links l
+			WHERE l.id > $1
+			ORDER BY l.id
+			LIMIT $2
+		)
+		SELECT bl.id, bl.url, bl.last_update, cl.chat_id
+		FROM batch_links bl
+		INNER JOIN chat_links cl ON cl.link_id = bl.id
+		ORDER BY bl.id, cl.chat_id
 	`
 
-	rows, err := r.pool.Query(ctx, query)
+	rows, err := r.pool.Query(ctx, query, afterLinkID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("query tracked links: %w", err)
+		return nil, fmt.Errorf("query tracked links batch: %w", err)
 	}
 	defer rows.Close()
 
-	res := make([]models.TrackedLink, 0)
+	res := make([]models.TrackedLink, 0, limit)
 	for rows.Next() {
 		var (
 			linkID     int64
@@ -33,7 +44,7 @@ func (r *Repository) ListAllLinks(ctx context.Context) ([]models.TrackedLink, er
 
 		scanErr := rows.Scan(&linkID, &url, &lastUpdate, &chatID)
 		if scanErr != nil {
-			return nil, fmt.Errorf("scan tracked link row: %w", scanErr)
+			return nil, fmt.Errorf("scan tracked link batch row: %w", scanErr)
 		}
 
 		if len(res) == 0 || res[len(res)-1].LinkID != linkID {
@@ -51,7 +62,7 @@ func (r *Repository) ListAllLinks(ctx context.Context) ([]models.TrackedLink, er
 
 	rowsErr := rows.Err()
 	if rowsErr != nil {
-		return nil, fmt.Errorf("iterate tracked links: %w", rowsErr)
+		return nil, fmt.Errorf("iterate tracked links batch: %w", rowsErr)
 	}
 
 	return res, nil

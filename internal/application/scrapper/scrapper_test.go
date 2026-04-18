@@ -96,8 +96,26 @@ func (s *stubRepo) GetTags(_ context.Context, chatID int64, url string) ([]strin
 	return s.tagsResp, s.getTagsErr
 }
 
-func (s *stubRepo) ListAllLinks(_ context.Context) ([]models.TrackedLink, error) {
-	return s.allLinks, s.listAllErr
+func (s *stubRepo) ListAllLinksBatch(_ context.Context, afterLinkID int64, limit int) ([]models.TrackedLink, error) {
+	if s.listAllErr != nil {
+		return nil, s.listAllErr
+	}
+	if limit <= 0 {
+		return []models.TrackedLink{}, nil
+	}
+
+	batch := make([]models.TrackedLink, 0, limit)
+	for _, link := range s.allLinks {
+		if link.LinkID <= afterLinkID {
+			continue
+		}
+		batch = append(batch, link)
+		if len(batch) == limit {
+			break
+		}
+	}
+
+	return batch, nil
 }
 
 func (s *stubRepo) UpdateLinksLastUpdate(_ context.Context, linkID int64, lastUpdate time.Time) error {
@@ -178,7 +196,7 @@ func TestScrapperCRUD(t *testing.T) {
 	repo := &stubRepo{
 		listResp: []domain.Link{{URL: "https://github.com/user/repo"}},
 	}
-	svc := NewScrapper(noopLogger{}, repo, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{})
+	svc := NewScrapper(noopLogger{}, repo, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{}, 100)
 	ctx := context.Background()
 	if err := svc.AddLink(ctx, models.AddLink{ChatID: 1, URL: "https://github.com/user/repo", Tags: []string{"go"}}); err != nil {
 		t.Fatalf("unexpected add link error: %v", err)
@@ -238,7 +256,7 @@ func TestScrapperErrors(t *testing.T) {
 		getTagsErr: ports.ErrChatNotFound,
 		delTagErr:  ports.ErrChatNotFound,
 		listErr:    ports.ErrChatNotFound,
-	}, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{})
+	}, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{}, 100)
 	ctx := context.Background()
 	if err := service.AddLink(ctx, models.AddLink{ChatID: 1}); !errors.Is(err, ports.ErrChatNotFound) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
@@ -268,7 +286,7 @@ func TestScrapperErrors(t *testing.T) {
 		addChatErr: ports.ErrChatAlreadyExists,
 		deleteErr:  ports.ErrChatNotFound,
 	}
-	service = NewScrapper(noopLogger{}, repo, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{})
+	service = NewScrapper(noopLogger{}, repo, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{}, 100)
 	if err := service.AddLink(ctx, models.AddLink{ChatID: 1}); !errors.Is(err, ports.ErrLinkAlreadyExists) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrLinkAlreadyExists)
 	}
@@ -307,7 +325,7 @@ func TestGetResourceUpdate(t *testing.T) {
 	}
 	ctx := context.Background()
 	for _, tt := range tests {
-		svc := NewScrapper(noopLogger{}, &stubRepo{}, &stubBotClient{}, tt.github, tt.stackoverflow)
+		svc := NewScrapper(noopLogger{}, &stubRepo{}, &stubBotClient{}, tt.github, tt.stackoverflow, 100)
 		update, desc, err := svc.getResourceUpdate(ctx, "https://example.com")
 		if tt.wantErr != nil {
 			if !errors.Is(err, tt.wantErr) {
@@ -341,7 +359,7 @@ func TestCheckLinks(t *testing.T) {
 	botClient := &stubBotClient{}
 	github := &stubGithub{owner: "user", repo: "repo", update: ports.ResourceUpdate{LastUpdate: newTime}}
 	stack := &stubStackOverflow{parseErr: errors.New("nope")}
-	svc := NewScrapper(noopLogger{}, repo, botClient, github, stack)
+	svc := NewScrapper(noopLogger{}, repo, botClient, github, stack, 100)
 
 	svc.CheckLinks(context.Background())
 
@@ -371,7 +389,7 @@ func TestCheckLinksSkipsWhenNothingChanged(t *testing.T) {
 	}
 	botClient := &stubBotClient{}
 	github := &stubGithub{owner: "user", repo: "repo", update: ports.ResourceUpdate{LastUpdate: current}}
-	svc := NewScrapper(noopLogger{}, repo, botClient, github, &stubStackOverflow{parseErr: errors.New("nope")})
+	svc := NewScrapper(noopLogger{}, repo, botClient, github, &stubStackOverflow{parseErr: errors.New("nope")}, 100)
 
 	svc.CheckLinks(context.Background())
 

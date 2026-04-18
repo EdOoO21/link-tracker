@@ -41,13 +41,14 @@ func (noopLogger) Warn(string, ...any)  {}
 func (noopLogger) Error(string, ...any) {}
 
 const (
-	defaultChatID        int64 = 101
-	firstChatID          int64 = 1
-	secondChatID         int64 = 2
-	missingLinkID        int64 = 999_999
-	dbReadyLogCount            = 2
-	expectedTwoLinks           = 2
-	postgresStartTimeout       = 60 * time.Second
+	defaultChatID         int64 = 101
+	firstChatID           int64 = 1
+	secondChatID          int64 = 2
+	missingLinkID         int64 = 999_999
+	trackedLinksBatchSize       = 100
+	dbReadyLogCount             = 2
+	expectedTwoLinks            = 2
+	postgresStartTimeout        = 60 * time.Second
 )
 
 func RunRepositorySuite(t *testing.T, constructor Constructor) {
@@ -259,9 +260,9 @@ func runListAllLinksAndUpdateTimestamp(t *testing.T, env *testEnv) {
 			t.Fatalf("TrackLink chat2: %v", trackErr)
 		}
 
-		tracked, err := repo.ListAllLinks(ctx)
+		tracked, err := listAllTrackedLinks(ctx, repo)
 		if err != nil {
-			t.Fatalf("ListAllLinks initial: %v", err)
+			t.Fatalf("ListAllLinksBatch initial: %v", err)
 		}
 		if len(tracked) != 1 {
 			t.Fatalf("tracked links len = %d, want 1", len(tracked))
@@ -274,9 +275,9 @@ func runListAllLinksAndUpdateTimestamp(t *testing.T, env *testEnv) {
 			t.Fatalf("UpdateLinksLastUpdate: %v", updateErr)
 		}
 
-		tracked, err = repo.ListAllLinks(ctx)
+		tracked, err = listAllTrackedLinks(ctx, repo)
 		if err != nil {
-			t.Fatalf("ListAllLinks after update: %v", err)
+			t.Fatalf("ListAllLinksBatch after update: %v", err)
 		}
 		if len(tracked) != 1 {
 			t.Fatalf("tracked links after update len = %d, want 1", len(tracked))
@@ -328,9 +329,9 @@ func runDeleteChatCleanup(t *testing.T, env *testEnv) {
 			t.Fatal("deleted chat1 reported as present")
 		}
 
-		tracked, err := repo.ListAllLinks(ctx)
+		tracked, err := listAllTrackedLinks(ctx, repo)
 		if err != nil {
-			t.Fatalf("ListAllLinks after deleting chat1: %v", err)
+			t.Fatalf("ListAllLinksBatch after deleting chat1: %v", err)
 		}
 		if len(tracked) != 1 {
 			t.Fatalf("tracked links after deleting chat1 len = %d, want 1", len(tracked))
@@ -342,9 +343,9 @@ func runDeleteChatCleanup(t *testing.T, env *testEnv) {
 			t.Fatalf("DeleteChat chat2: %v", deleteErr)
 		}
 
-		tracked, err = repo.ListAllLinks(ctx)
+		tracked, err = listAllTrackedLinks(ctx, repo)
 		if err != nil {
-			t.Fatalf("ListAllLinks after deleting all chats: %v", err)
+			t.Fatalf("ListAllLinksBatch after deleting all chats: %v", err)
 		}
 		if len(tracked) != 0 {
 			t.Fatalf("tracked links after deleting all chats len = %d, want 0", len(tracked))
@@ -417,6 +418,25 @@ func newTestEnv(ctx context.Context, t *testing.T, constructor Constructor) *tes
 		adminPool:   adminPool,
 		constructor: constructor,
 		container:   container,
+	}
+}
+
+func listAllTrackedLinks(ctx context.Context, repo Repository) ([]models.TrackedLink, error) {
+	res := make([]models.TrackedLink, 0)
+	var afterLinkID int64
+
+	for {
+		batch, err := repo.ListAllLinksBatch(ctx, afterLinkID, trackedLinksBatchSize)
+		if err != nil {
+			return nil, fmt.Errorf("list all links: %w", err)
+		}
+
+		if len(batch) == 0 {
+			return res, nil
+		}
+
+		res = append(res, batch...)
+		afterLinkID = batch[len(batch)-1].LinkID
 	}
 }
 
