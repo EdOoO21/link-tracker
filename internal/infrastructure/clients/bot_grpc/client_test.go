@@ -17,13 +17,22 @@ func (noopLogger) Warn(string, ...any)  {}
 func (noopLogger) Error(string, ...any) {}
 
 type mockBotServiceClient struct {
-	gotRequest *pc.SendUpdatesRequest
-	resp       *empty.Empty
-	err        error
+	gotRequest       *pc.SendUpdatesRequest
+	gotFailedRequest *pc.SendFailedLinksReportRequest
+	resp             *empty.Empty
+	err              error
 }
 
 func (m *mockBotServiceClient) SendUpdates(_ context.Context, in *pc.SendUpdatesRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	m.gotRequest = in
+	if m.resp == nil {
+		m.resp = &empty.Empty{}
+	}
+	return m.resp, m.err
+}
+
+func (m *mockBotServiceClient) SendFailedLinksReport(_ context.Context, in *pc.SendFailedLinksReportRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	m.gotFailedRequest = in
 	if m.resp == nil {
 		m.resp = &empty.Empty{}
 	}
@@ -61,6 +70,38 @@ func TestGRPCClientSendUpdatesReturnsWrappedError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	if err.Error() != "updates send: boom" {
+		t.Fatalf("got error %q", err.Error())
+	}
+}
+
+func TestGRPCClientSendFailedLinksReport(t *testing.T) {
+	mockClient := &mockBotServiceClient{}
+	client := &GRPCClient{client: mockClient, logger: noopLogger{}}
+
+	err := client.SendFailedLinksReport(context.Background(), 7, []string{"https://github.com/user/repo", "https://stackoverflow.com/questions/123/title"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mockClient.gotFailedRequest == nil {
+		t.Fatal("expected request to be sent")
+	}
+	if mockClient.gotFailedRequest.GetTgChatId() != 7 {
+		t.Fatalf("got chat id %d", mockClient.gotFailedRequest.GetTgChatId())
+	}
+	if len(mockClient.gotFailedRequest.GetUrls()) != 2 {
+		t.Fatalf("got urls %v", mockClient.gotFailedRequest.GetUrls())
+	}
+}
+
+func TestGRPCClientSendFailedLinksReportReturnsWrappedError(t *testing.T) {
+	mockClient := &mockBotServiceClient{err: errors.New("boom")}
+	client := &GRPCClient{client: mockClient, logger: noopLogger{}}
+
+	err := client.SendFailedLinksReport(context.Background(), 7, []string{"https://github.com/user/repo"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "failed links report send: boom" {
 		t.Fatalf("got error %q", err.Error())
 	}
 }

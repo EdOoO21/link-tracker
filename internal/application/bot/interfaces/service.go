@@ -8,4 +8,5 @@ import (
 
 type BotService interface {
 	SendUpdateMessages(ctx context.Context, updates models.SendUpdates) error
+	SendFailedLinksReport(ctx context.Context, report models.FailedLinksReport) error
 }

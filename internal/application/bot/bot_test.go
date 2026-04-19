@@ -129,6 +129,17 @@ func TestLinkUpdated(t *testing.T) {
 	}
 }
 
+func TestFailedLinksReport(t *testing.T) {
+	got := failedLinksReport([]string{
+		"https://github.com/user/repo",
+		"https://stackoverflow.com/questions/123/title",
+	})
+	want := "Не удалось обработать ссылки:\n\n1. https://github.com/user/repo\n2. https://stackoverflow.com/questions/123/title\n"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
 func TestLinksOutput(t *testing.T) {
 	links := []domain.Link{
 		{URL: "https://github.com/user/repo1", LastUpdate: time.Time{}},

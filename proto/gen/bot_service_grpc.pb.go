@@ -20,7 +20,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	BotService_SendUpdates_FullMethodName = "/linktracker.v1.BotService/SendUpdates"
+	BotService_SendUpdates_FullMethodName           = "/linktracker.v1.BotService/SendUpdates"
+	BotService_SendFailedLinksReport_FullMethodName = "/linktracker.v1.BotService/SendFailedLinksReport"
 )
 
 // BotServiceClient is the client API for BotService service.
@@ -28,6 +29,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BotServiceClient interface {
 	SendUpdates(ctx context.Context, in *SendUpdatesRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	SendFailedLinksReport(ctx context.Context, in *SendFailedLinksReportRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type botServiceClient struct {
@@ -48,11 +50,22 @@ func (c *botServiceClient) SendUpdates(ctx context.Context, in *SendUpdatesReque
 	return out, nil
 }
 
+func (c *botServiceClient) SendFailedLinksReport(ctx context.Context, in *SendFailedLinksReportRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, BotService_SendFailedLinksReport_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BotServiceServer is the server API for BotService service.
 // All implementations must embed UnimplementedBotServiceServer
 // for forward compatibility.
 type BotServiceServer interface {
 	SendUpdates(context.Context, *SendUpdatesRequest) (*empty.Empty, error)
+	SendFailedLinksReport(context.Context, *SendFailedLinksReportRequest) (*empty.Empty, error)
 	mustEmbedUnimplementedBotServiceServer()
 }
 
@@ -65,6 +78,9 @@ type UnimplementedBotServiceServer struct{}
 
 func (UnimplementedBotServiceServer) SendUpdates(context.Context, *SendUpdatesRequest) (*empty.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendUpdates not implemented")
+}
+func (UnimplementedBotServiceServer) SendFailedLinksReport(context.Context, *SendFailedLinksReportRequest) (*empty.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SendFailedLinksReport not implemented")
 }
 func (UnimplementedBotServiceServer) mustEmbedUnimplementedBotServiceServer() {}
 func (UnimplementedBotServiceServer) testEmbeddedByValue()                    {}
@@ -105,6 +121,24 @@ func _BotService_SendUpdates_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BotService_SendFailedLinksReport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendFailedLinksReportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).SendFailedLinksReport(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_SendFailedLinksReport_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).SendFailedLinksReport(ctx, req.(*SendFailedLinksReportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BotService_ServiceDesc is the grpc.ServiceDesc for BotService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -115,6 +149,10 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendUpdates",
 			Handler:    _BotService_SendUpdates_Handler,
+		},
+		{
+			MethodName: "SendFailedLinksReport",
+			Handler:    _BotService_SendFailedLinksReport_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -82,6 +82,58 @@ func (x *SendUpdatesRequest) GetDescription() string {
 	return ""
 }
 
+type SendFailedLinksReportRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TgChatId      int64                  `protobuf:"varint,1,opt,name=tg_chat_id,json=tgChatId,proto3" json:"tg_chat_id,omitempty"`
+	Urls          []string               `protobuf:"bytes,2,rep,name=urls,proto3" json:"urls,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendFailedLinksReportRequest) Reset() {
+	*x = SendFailedLinksReportRequest{}
+	mi := &file_bot_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendFailedLinksReportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendFailedLinksReportRequest) ProtoMessage() {}
+
+func (x *SendFailedLinksReportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bot_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendFailedLinksReportRequest.ProtoReflect.Descriptor instead.
+func (*SendFailedLinksReportRequest) Descriptor() ([]byte, []int) {
+	return file_bot_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SendFailedLinksReportRequest) GetTgChatId() int64 {
+	if x != nil {
+		return x.TgChatId
+	}
+	return 0
+}
+
+func (x *SendFailedLinksReportRequest) GetUrls() []string {
+	if x != nil {
+		return x.Urls
+	}
+	return nil
+}
+
 var File_bot_service_proto protoreflect.FileDescriptor
 
 const file_bot_service_proto_rawDesc = "" +
@@ -90,10 +142,15 @@ const file_bot_service_proto_rawDesc = "" +
 	"\x12SendUpdatesRequest\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1e\n" +
 	"\vtg_chat_ids\x18\x02 \x03(\x03R\ttgChatIds\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription2W\n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\"P\n" +
+	"\x1cSendFailedLinksReportRequest\x12\x1c\n" +
+	"\n" +
+	"tg_chat_id\x18\x01 \x01(\x03R\btgChatId\x12\x12\n" +
+	"\x04urls\x18\x02 \x03(\tR\x04urls2\xb6\x01\n" +
 	"\n" +
 	"BotService\x12I\n" +
-	"\vSendUpdates\x12\".linktracker.v1.SendUpdatesRequest\x1a\x16.google.protobuf.EmptyB^Z\\gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/proto;linktrackerv1b\x06proto3"
+	"\vSendUpdates\x12\".linktracker.v1.SendUpdatesRequest\x1a\x16.google.protobuf.Empty\x12]\n" +
+	"\x15SendFailedLinksReport\x12,.linktracker.v1.SendFailedLinksReportRequest\x1a\x16.google.protobuf.EmptyB^Z\\gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/proto;linktrackerv1b\x06proto3"
 
 var (
 	file_bot_service_proto_rawDescOnce sync.Once
@@ -107,16 +164,19 @@ func file_bot_service_proto_rawDescGZIP() []byte {
 	return file_bot_service_proto_rawDescData
 }
 
-var file_bot_service_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_bot_service_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_bot_service_proto_goTypes = []any{
-	(*SendUpdatesRequest)(nil), // 0: linktracker.v1.SendUpdatesRequest
-	(*empty.Empty)(nil),        // 1: google.protobuf.Empty
+	(*SendUpdatesRequest)(nil),           // 0: linktracker.v1.SendUpdatesRequest
+	(*SendFailedLinksReportRequest)(nil), // 1: linktracker.v1.SendFailedLinksReportRequest
+	(*empty.Empty)(nil),                  // 2: google.protobuf.Empty
 }
 var file_bot_service_proto_depIdxs = []int32{
 	0, // 0: linktracker.v1.BotService.SendUpdates:input_type -> linktracker.v1.SendUpdatesRequest
-	1, // 1: linktracker.v1.BotService.SendUpdates:output_type -> google.protobuf.Empty
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	1, // 1: linktracker.v1.BotService.SendFailedLinksReport:input_type -> linktracker.v1.SendFailedLinksReportRequest
+	2, // 2: linktracker.v1.BotService.SendUpdates:output_type -> google.protobuf.Empty
+	2, // 3: linktracker.v1.BotService.SendFailedLinksReport:output_type -> google.protobuf.Empty
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -133,7 +193,7 @@ func file_bot_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bot_service_proto_rawDesc), len(file_bot_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -89,6 +89,7 @@ func (s *Scrapper) CheckLinks(ctx context.Context) {
 
 		s.logger.Info("scrapper links batch loaded", "afterLinkID", afterLinkID, "batchSize", s.batchSize, "uniqueLinks", len(batch))
 
+		failedLinksByChat := make(map[int64]map[string]struct{})
 		for _, link := range batch {
 			totalLinks++
 			totalSubscriptions += len(link.ChatIDs)
@@ -97,6 +98,7 @@ func (s *Scrapper) CheckLinks(ctx context.Context) {
 			update, updateErr := s.getResourceUpdate(ctx, link)
 			if updateErr != nil {
 				s.logger.Warn("failed to get resource update", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", updateErr)
+				addFailedLink(failedLinksByChat, link)
 				continue
 			}
 
@@ -109,22 +111,50 @@ func (s *Scrapper) CheckLinks(ctx context.Context) {
 
 			if err = s.botClient.SendUpdates(ctx, link.ChatIDs, link.URL, update.Message); err != nil {
 				s.logger.Error("failed to send update notification", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", err)
+				addFailedLink(failedLinksByChat, link)
 				continue
 			}
 			s.logger.Info("update notification sent", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL)
 
 			if err = s.repo.UpdateLinksLastUpdate(ctx, link.LinkID, update.LastUpdate); err != nil {
 				s.logger.Error("failed to update last update time", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "error", err)
+				addFailedLink(failedLinksByChat, link)
 				continue
 			}
 
 			s.logger.Info("link update processed", "linkID", link.LinkID, "chatIDs", link.ChatIDs, "url", link.URL, "previousLastUpdate", link.LastUpdate, "newLastUpdate", update.LastUpdate)
 		}
+		s.sendFailedLinksReports(ctx, failedLinksByChat)
 
 		afterLinkID = batch[len(batch)-1].LinkID
 	}
 
 	s.logger.Info("scrapper links scan finished", "uniqueLinks", totalLinks, "subscriptions", totalSubscriptions)
+}
+
+func addFailedLink(failedLinksByChat map[int64]map[string]struct{}, link models.TrackedLink) {
+	for _, chatID := range link.ChatIDs {
+		if failedLinksByChat[chatID] == nil {
+			failedLinksByChat[chatID] = make(map[string]struct{})
+		}
+		failedLinksByChat[chatID][link.URL] = struct{}{}
+	}
+}
+
+func (s *Scrapper) sendFailedLinksReports(ctx context.Context, failedLinksByChat map[int64]map[string]struct{}) {
+	for chatID, urlsSet := range failedLinksByChat {
+		urls := make([]string, 0, len(urlsSet))
+		for url := range urlsSet {
+			urls = append(urls, url)
+		}
+		slices.Sort(urls)
+
+		if err := s.botClient.SendFailedLinksReport(ctx, chatID, urls); err != nil {
+			s.logger.Error("failed to send failed links report", "chatID", chatID, "error", err)
+			continue
+		}
+		s.logger.Info("failed links report sent", "chatID", chatID, "count", len(urls))
+	}
 }
 
 func (s *Scrapper) AddLink(ctx context.Context, link models.AddLink) error {

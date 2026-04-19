@@ -40,6 +40,20 @@ func (b *ServiceServer) SendUpdates(ctx context.Context, req *pb.SendUpdatesRequ
 	return &empty.Empty{}, nil
 }
 
+func (b *ServiceServer) SendFailedLinksReport(ctx context.Context, req *pb.SendFailedLinksReportRequest) (*empty.Empty, error) {
+	report := serviceModels.FailedLinksReport{
+		ChatID: req.GetTgChatId(),
+		URLs:   req.GetUrls(),
+	}
+
+	if err := b.botService.SendFailedLinksReport(ctx, report); err != nil {
+		b.logger.Error("failed to send failed links report via grpc", "error", err)
+		return nil, toStatusError(err)
+	}
+
+	return &empty.Empty{}, nil
+}
+
 //nolint:wrapcheck // gRPC handlers must return raw status errors to preserve status codes.
 func toStatusError(err error) error {
 	return status.Error(codes.Internal, err.Error())

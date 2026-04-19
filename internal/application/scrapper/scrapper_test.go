@@ -140,12 +140,33 @@ type stubBotClient struct {
 		url         string
 		description string
 	}
+	failedReport struct {
+		chatID int64
+		urls   []string
+	}
+	failedReports []struct {
+		chatID int64
+		urls   []string
+	}
 }
 
 func (s *stubBotClient) SendUpdates(_ context.Context, chatIDs []int64, url, description string) error {
 	s.got.chatIDs = chatIDs
 	s.got.url = url
 	s.got.description = description
+	return s.err
+}
+
+func (s *stubBotClient) SendFailedLinksReport(_ context.Context, chatID int64, urls []string) error {
+	s.failedReport.chatID = chatID
+	s.failedReport.urls = append([]string(nil), urls...)
+	s.failedReports = append(s.failedReports, struct {
+		chatID int64
+		urls   []string
+	}{
+		chatID: chatID,
+		urls:   append([]string(nil), urls...),
+	})
 	return s.err
 }
 
@@ -423,5 +444,46 @@ func TestCheckLinksSkipsWhenNothingChanged(t *testing.T) {
 	}
 	if repo.updated.linkID != 0 {
 		t.Fatalf("expected no repo update, got %+v", repo.updated)
+	}
+}
+
+func TestCheckLinksSendsFailedLinksReport(t *testing.T) {
+	current := time.Date(2026, 3, 30, 18, 0, 0, 0, time.UTC)
+	repo := &stubRepo{
+		allLinks: []models.TrackedLink{{
+			LinkID:     42,
+			URL:        "https://github.com/user/repo",
+			LastUpdate: current,
+			ChatIDs:    []int64{2, 1},
+		}},
+	}
+	botClient := &stubBotClient{}
+	github := &stubGithub{
+		parseErr: errors.New("nope"),
+	}
+	stack := &stubStackOverflow{
+		parseErr: errors.New("nope"),
+	}
+	svc := NewScrapper(noopLogger{}, repo, botClient, github, stack, 100)
+
+	svc.CheckLinks(context.Background())
+
+	if len(botClient.failedReports) != 2 {
+		t.Fatalf("expected 2 reports, got %+v", botClient.failedReports)
+	}
+
+	gotByChat := make(map[int64][]string, len(botClient.failedReports))
+	for _, report := range botClient.failedReports {
+		gotByChat[report.chatID] = report.urls
+	}
+
+	for _, chatID := range []int64{1, 2} {
+		urls, ok := gotByChat[chatID]
+		if !ok {
+			t.Fatalf("missing report for chat %d: %+v", chatID, botClient.failedReports)
+		}
+		if len(urls) != 1 || urls[0] != "https://github.com/user/repo" {
+			t.Fatalf("got report urls for chat %d: %v", chatID, urls)
+		}
 	}
 }

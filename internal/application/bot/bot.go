@@ -120,6 +120,21 @@ func (a *App) SendUpdateMessages(ctx context.Context, updates models.SendUpdates
 	return nil
 }
 
+func (a *App) SendFailedLinksReport(ctx context.Context, report models.FailedLinksReport) error {
+	msg := tgbotapi.NewMessage(report.ChatID, failedLinksReport(report.URLs))
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("send failed links report: %w", err)
+	}
+
+	if _, err := a.bot.Send(msg); err != nil {
+		a.logger.Error("error to send failed links report", "error", err, "chatID", report.ChatID)
+		return fmt.Errorf("send failed links report: %w", err)
+	}
+
+	a.logger.Info("failed links report sent", "chatID", report.ChatID, "count", len(report.URLs))
+	return nil
+}
+
 func (a *App) Run(ctx context.Context) error {
 	u := tgbotapi.NewUpdate(a.config.Offset)
 	u.Timeout = a.config.Timeout
@@ -492,6 +507,19 @@ func tagsOutput(url string, tags []string) string {
 		text.WriteString(strconv.Itoa(i + 1))
 		text.WriteString(". ")
 		text.WriteString(tag)
+		text.WriteString("\n")
+	}
+
+	return text.String()
+}
+
+func failedLinksReport(urls []string) string {
+	var text strings.Builder
+	text.WriteString("Не удалось обработать ссылки:\n\n")
+	for i, url := range urls {
+		text.WriteString(strconv.Itoa(i + 1))
+		text.WriteString(". ")
+		text.WriteString(url)
 		text.WriteString("\n")
 	}
 

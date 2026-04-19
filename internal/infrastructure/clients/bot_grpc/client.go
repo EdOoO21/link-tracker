@@ -33,3 +33,15 @@ func (b *GRPCClient) SendUpdates(ctx context.Context, chatIDs []int64, url, desc
 	}
 	return nil
 }
+
+func (b *GRPCClient) SendFailedLinksReport(ctx context.Context, chatID int64, urls []string) error {
+	report := &pc.SendFailedLinksReportRequest{
+		TgChatId: chatID,
+		Urls:     urls,
+	}
+
+	if _, err := b.client.SendFailedLinksReport(ctx, report); err != nil {
+		return fmt.Errorf("failed links report send: %w", err)
+	}
+	return nil
+}

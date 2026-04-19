@@ -20,11 +20,17 @@ func (noopLogger) Error(string, ...any) {}
 
 type mockBotService struct {
 	gotUpdates serviceModels.SendUpdates
+	gotReport  serviceModels.FailedLinksReport
 	err        error
 }
 
 func (m *mockBotService) SendUpdateMessages(_ context.Context, updates serviceModels.SendUpdates) error {
 	m.gotUpdates = updates
+	return m.err
+}
+
+func (m *mockBotService) SendFailedLinksReport(_ context.Context, report serviceModels.FailedLinksReport) error {
+	m.gotReport = report
 	return m.err
 }
 
@@ -69,6 +75,68 @@ func TestBotServiceServerSendUpdates(t *testing.T) {
 		resp, err := server.SendUpdates(context.Background(), req)
 		if !reflect.DeepEqual(service.gotUpdates, tt.wantUpdates) {
 			t.Fatalf("got updates %+v, want %+v", service.gotUpdates, tt.wantUpdates)
+		}
+
+		if tt.wantCode == codes.OK {
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resp == nil {
+				t.Fatal("expected non-nil response")
+			}
+			continue
+		}
+
+		if resp != nil {
+			t.Fatal("expected nil response on error")
+		}
+		if status.Code(err) != tt.wantCode {
+			t.Fatalf("got code %v, want %v", status.Code(err), tt.wantCode)
+		}
+		if status.Convert(err).Message() != tt.serviceErr.Error() {
+			t.Fatalf("got message %q, want %q", status.Convert(err).Message(), tt.serviceErr.Error())
+		}
+	}
+}
+
+func TestBotServiceServerSendFailedLinksReport(t *testing.T) {
+	tests := []struct {
+		name       string
+		serviceErr error
+		wantCode   codes.Code
+		wantReport serviceModels.FailedLinksReport
+	}{
+		{
+			name:       "success maps request to service model",
+			serviceErr: nil,
+			wantCode:   codes.OK,
+			wantReport: serviceModels.FailedLinksReport{
+				ChatID: 7,
+				URLs:   []string{"https://github.com/user/repo", "https://stackoverflow.com/questions/123/title"},
+			},
+		},
+		{
+			name:       "service error becomes internal grpc status",
+			serviceErr: errors.New("send failed"),
+			wantCode:   codes.Internal,
+			wantReport: serviceModels.FailedLinksReport{
+				ChatID: 7,
+				URLs:   []string{"https://github.com/user/repo", "https://stackoverflow.com/questions/123/title"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		service := &mockBotService{err: tt.serviceErr}
+		server := NewBotServiceServer(noopLogger{}, service)
+		req := &pb.SendFailedLinksReportRequest{
+			TgChatId: tt.wantReport.ChatID,
+			Urls:     tt.wantReport.URLs,
+		}
+
+		resp, err := server.SendFailedLinksReport(context.Background(), req)
+		if !reflect.DeepEqual(service.gotReport, tt.wantReport) {
+			t.Fatalf("got report %+v, want %+v", service.gotReport, tt.wantReport)
 		}
 
 		if tt.wantCode == codes.OK {
