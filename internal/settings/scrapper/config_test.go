@@ -85,6 +85,9 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.BatchSize != 100 {
 		t.Fatalf("got batch size %d, want 100", cfg.BatchSize)
 	}
+	if cfg.WorkerCount != 4 {
+		t.Fatalf("got worker count %d, want 4", cfg.WorkerCount)
+	}
 }
 
 func TestLoadConfigReturnsBotURLError(t *testing.T) {
@@ -131,5 +134,38 @@ func TestLoadConfigReturnsBatchSizeError(t *testing.T) {
 	_, err := LoadConfig()
 	if !errors.Is(err, ErrBatchSizeInvalid) {
 		t.Fatalf("got err %v, want %v", err, ErrBatchSizeInvalid)
+	}
+}
+
+func TestLoadConfigUsesConfiguredWorkerCount(t *testing.T) {
+	t.Setenv("APP_BOT_BASE_URL", "http://localhost:9090")
+	t.Setenv("APP_SCRAPPER_BASE_URL", "http://localhost:9080")
+	t.Setenv("APP_DATABASE_URL", "postgres://localhost:5432/linktracker")
+	t.Setenv("APP_DATABASE_USER", "postgres")
+	t.Setenv("APP_DATABASE_PASSWORD", "postgres")
+	t.Setenv("APP_DATABASE_ACCESS_TYPE", "sql")
+	t.Setenv("APP_SCRAPPER_WORKER_COUNT", "8")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.WorkerCount != 8 {
+		t.Fatalf("got worker count %d, want 8", cfg.WorkerCount)
+	}
+}
+
+func TestLoadConfigReturnsWorkerCountError(t *testing.T) {
+	t.Setenv("APP_BOT_BASE_URL", "http://localhost:9090")
+	t.Setenv("APP_SCRAPPER_BASE_URL", "http://localhost:9080")
+	t.Setenv("APP_DATABASE_URL", "postgres://localhost:5432/linktracker")
+	t.Setenv("APP_DATABASE_USER", "postgres")
+	t.Setenv("APP_DATABASE_PASSWORD", "postgres")
+	t.Setenv("APP_DATABASE_ACCESS_TYPE", "sql")
+	t.Setenv("APP_SCRAPPER_WORKER_COUNT", "0")
+
+	_, err := LoadConfig()
+	if !errors.Is(err, ErrWorkerCountInvalid) {
+		t.Fatalf("got err %v, want %v", err, ErrWorkerCountInvalid)
 	}
 }

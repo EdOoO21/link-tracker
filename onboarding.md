@@ -9,6 +9,8 @@ APP_DATABASE_USER=user_example<br>
 APP_DATABASE_PASSWORD=pass_example<br>
 APP_DATABASE_URL=postgres://user_example:pass_example@localhost:5432/db_example?sslmode=disable<br>
 APP_DATABASE_ACCESS_TYPE=SQL<br>
+APP_SCRAPPER_WORKER_COUNT=4<br>
+APP_SCRAPPER_BATCH_SIZE=100<br>
 3. поднимите postgres `docker compose up`
 4. `set -a`<br>
 `source ./.env`<br>

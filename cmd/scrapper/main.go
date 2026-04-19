@@ -42,7 +42,7 @@ func run(ctx context.Context, logger *logs.Logger) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	logger.Info("scrapper config loaded", "bot_addr", cfg.BotURL.HostPort(), "grpc_port", cfg.GRPCPort, "access_type", cfg.DB.AccessType, "batch_size", cfg.BatchSize)
+	logger.Info("scrapper config loaded", "bot_addr", cfg.BotURL.HostPort(), "grpc_port", cfg.GRPCPort, "access_type", cfg.DB.AccessType, "batch_size", cfg.BatchSize, "worker_count", cfg.WorkerCount)
 
 	repository, err := postgresrepo.NewRepository(ctx, logger, cfg.DB)
 	if err != nil {
@@ -64,7 +64,7 @@ func run(ctx context.Context, logger *logs.Logger) error {
 		}
 	}()
 
-	scrapperService := scrapper.NewScrapper(logger, repository, botClient, githubClient, stackOverflowClient, cfg.BatchSize)
+	scrapperService := scrapper.NewScrapper(logger, repository, botClient, githubClient, stackOverflowClient, cfg.BatchSize, cfg.WorkerCount)
 	scrapperService.RunCron(ctx, 1*time.Minute)
 	logger.Info("scrapper cron started", "interval", time.Minute)
 

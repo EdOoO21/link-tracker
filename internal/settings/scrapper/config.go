@@ -18,9 +18,13 @@ var (
 	ErrDatabasePasswordEmpty = errors.New("database password is empty")
 	ErrAccessTypeInvalid     = errors.New("access type is empty/invalid")
 	ErrBatchSizeInvalid      = errors.New("batch size is invalid")
+	ErrWorkerCountInvalid    = errors.New("worker count is invalid")
 )
 
-const defaultBatchSize = 100
+const (
+	defaultBatchSize   = 100
+	defaultWorkerCount = 4
+)
 
 type ServiceURL struct {
 	Full string
@@ -43,10 +47,11 @@ type DBConfig struct {
 }
 
 type Config struct {
-	BotURL    ServiceURL
-	DB        DBConfig
-	GRPCPort  int
-	BatchSize int
+	BotURL      ServiceURL
+	DB          DBConfig
+	GRPCPort    int
+	BatchSize   int
+	WorkerCount int
 }
 
 func LoadConfig() (*Config, error) {
@@ -57,6 +62,7 @@ func LoadConfig() (*Config, error) {
 	databasePassword := os.Getenv("APP_DATABASE_PASSWORD")
 	accessType := os.Getenv("APP_DATABASE_ACCESS_TYPE")
 	batchSize, err := loadBatchSize()
+	workerCount, workerErr := loadWorkerCount()
 
 	if botRawURL == "" {
 		return nil, ErrBotURLEmpty
@@ -80,6 +86,9 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if workerErr != nil {
+		return nil, workerErr
+	}
 
 	botURL, err := parseServiceURL(botRawURL, ErrBotURLInvalid)
 	if err != nil {
@@ -91,9 +100,10 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		BotURL:    botURL,
-		GRPCPort:  scrapperURL.Port,
-		BatchSize: batchSize,
+		BotURL:      botURL,
+		GRPCPort:    scrapperURL.Port,
+		BatchSize:   batchSize,
+		WorkerCount: workerCount,
 		DB: DBConfig{
 			DatabaseURL:      databaseURL,
 			DatabaseUser:     databaseUser,
@@ -128,4 +138,18 @@ func loadBatchSize() (int, error) {
 	}
 
 	return batchSize, nil
+}
+
+func loadWorkerCount() (int, error) {
+	raw := strings.TrimSpace(os.Getenv("APP_SCRAPPER_WORKER_COUNT"))
+	if raw == "" {
+		return defaultWorkerCount, nil
+	}
+
+	workerCount, err := strconv.Atoi(raw)
+	if err != nil || workerCount <= 0 {
+		return 0, ErrWorkerCountInvalid
+	}
+
+	return workerCount, nil
 }
