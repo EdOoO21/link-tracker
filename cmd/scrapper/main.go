@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	scrapper "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper"
 	scrapperinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/interfaces"
@@ -42,7 +41,7 @@ func run(ctx context.Context, logger *logs.Logger) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	logger.Info("scrapper config loaded", "bot_addr", cfg.BotURL.HostPort(), "grpc_port", cfg.GRPCPort, "access_type", cfg.DB.AccessType, "batch_size", cfg.BatchSize, "worker_count", cfg.WorkerCount)
+	logger.Info("scrapper config loaded", "bot_addr", cfg.BotURL.HostPort(), "grpc_port", cfg.GRPCPort, "access_type", cfg.DB.AccessType, "batch_size", cfg.BatchSize, "worker_count", cfg.WorkerCount, "check_interval", cfg.CheckInterval)
 
 	repository, err := postgresrepo.NewRepository(ctx, logger, cfg.DB)
 	if err != nil {
@@ -65,8 +64,8 @@ func run(ctx context.Context, logger *logs.Logger) error {
 	}()
 
 	scrapperService := scrapper.NewScrapper(logger, repository, botClient, githubClient, stackOverflowClient, cfg.BatchSize, cfg.WorkerCount)
-	scrapperService.RunCron(ctx, 1*time.Minute)
-	logger.Info("scrapper cron started", "interval", time.Minute)
+	scrapperService.RunCron(ctx, cfg.CheckInterval)
+	logger.Info("scrapper cron started", "interval", cfg.CheckInterval)
 
 	var listenerConfig net.ListenConfig
 	grpcListener, err := listenerConfig.Listen(ctx, "tcp", fmt.Sprintf(":%d", cfg.GRPCPort))

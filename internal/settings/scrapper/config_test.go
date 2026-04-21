@@ -3,6 +3,7 @@ package scrapper
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestServiceURLHostPort(t *testing.T) {
@@ -88,6 +89,9 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.WorkerCount != 4 {
 		t.Fatalf("got worker count %d, want 4", cfg.WorkerCount)
 	}
+	if cfg.CheckInterval != time.Minute {
+		t.Fatalf("got check interval %s, want %s", cfg.CheckInterval, time.Minute)
+	}
 }
 
 func TestLoadConfigReturnsBotURLError(t *testing.T) {
@@ -167,5 +171,38 @@ func TestLoadConfigReturnsWorkerCountError(t *testing.T) {
 	_, err := LoadConfig()
 	if !errors.Is(err, ErrWorkerCountInvalid) {
 		t.Fatalf("got err %v, want %v", err, ErrWorkerCountInvalid)
+	}
+}
+
+func TestLoadConfigUsesConfiguredCheckInterval(t *testing.T) {
+	t.Setenv("APP_BOT_BASE_URL", "http://localhost:9090")
+	t.Setenv("APP_SCRAPPER_BASE_URL", "http://localhost:9080")
+	t.Setenv("APP_DATABASE_URL", "postgres://localhost:5432/linktracker")
+	t.Setenv("APP_DATABASE_USER", "postgres")
+	t.Setenv("APP_DATABASE_PASSWORD", "postgres")
+	t.Setenv("APP_DATABASE_ACCESS_TYPE", "sql")
+	t.Setenv("APP_SCRAPPER_CHECK_INTERVAL", "30s")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CheckInterval != 30*time.Second {
+		t.Fatalf("got check interval %s, want 30s", cfg.CheckInterval)
+	}
+}
+
+func TestLoadConfigReturnsCheckIntervalError(t *testing.T) {
+	t.Setenv("APP_BOT_BASE_URL", "http://localhost:9090")
+	t.Setenv("APP_SCRAPPER_BASE_URL", "http://localhost:9080")
+	t.Setenv("APP_DATABASE_URL", "postgres://localhost:5432/linktracker")
+	t.Setenv("APP_DATABASE_USER", "postgres")
+	t.Setenv("APP_DATABASE_PASSWORD", "postgres")
+	t.Setenv("APP_DATABASE_ACCESS_TYPE", "sql")
+	t.Setenv("APP_SCRAPPER_CHECK_INTERVAL", "0s")
+
+	_, err := LoadConfig()
+	if !errors.Is(err, ErrCheckIntervalInvalid) {
+		t.Fatalf("got err %v, want %v", err, ErrCheckIntervalInvalid)
 	}
 }

@@ -122,9 +122,7 @@ func (s *Scrapper) processBatch(ctx context.Context, batch []models.TrackedLink)
 	)
 
 	for range workerCount {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for link := range jobs {
 				if err := s.processLink(ctx, link); err != nil {
 					mu.Lock()
@@ -132,7 +130,7 @@ func (s *Scrapper) processBatch(ctx context.Context, batch []models.TrackedLink)
 					mu.Unlock()
 				}
 			}
-		}()
+		})
 	}
 
 	for _, link := range batch {

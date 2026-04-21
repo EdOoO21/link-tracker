@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -19,11 +20,13 @@ var (
 	ErrAccessTypeInvalid     = errors.New("access type is empty/invalid")
 	ErrBatchSizeInvalid      = errors.New("batch size is invalid")
 	ErrWorkerCountInvalid    = errors.New("worker count is invalid")
+	ErrCheckIntervalInvalid  = errors.New("check interval is invalid")
 )
 
 const (
-	defaultBatchSize   = 100
-	defaultWorkerCount = 4
+	defaultBatchSize     = 100
+	defaultWorkerCount   = 4
+	defaultCheckInterval = time.Minute
 )
 
 type ServiceURL struct {
@@ -47,11 +50,12 @@ type DBConfig struct {
 }
 
 type Config struct {
-	BotURL      ServiceURL
-	DB          DBConfig
-	GRPCPort    int
-	BatchSize   int
-	WorkerCount int
+	BotURL        ServiceURL
+	DB            DBConfig
+	GRPCPort      int
+	BatchSize     int
+	WorkerCount   int
+	CheckInterval time.Duration
 }
 
 func LoadConfig() (*Config, error) {
@@ -63,6 +67,7 @@ func LoadConfig() (*Config, error) {
 	accessType := os.Getenv("APP_DATABASE_ACCESS_TYPE")
 	batchSize, err := loadBatchSize()
 	workerCount, workerErr := loadWorkerCount()
+	checkInterval, intervalErr := loadCheckInterval()
 
 	if botRawURL == "" {
 		return nil, ErrBotURLEmpty
@@ -89,6 +94,9 @@ func LoadConfig() (*Config, error) {
 	if workerErr != nil {
 		return nil, workerErr
 	}
+	if intervalErr != nil {
+		return nil, intervalErr
+	}
 
 	botURL, err := parseServiceURL(botRawURL, ErrBotURLInvalid)
 	if err != nil {
@@ -100,10 +108,11 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		BotURL:      botURL,
-		GRPCPort:    scrapperURL.Port,
-		BatchSize:   batchSize,
-		WorkerCount: workerCount,
+		BotURL:        botURL,
+		GRPCPort:      scrapperURL.Port,
+		BatchSize:     batchSize,
+		WorkerCount:   workerCount,
+		CheckInterval: checkInterval,
 		DB: DBConfig{
 			DatabaseURL:      databaseURL,
 			DatabaseUser:     databaseUser,
@@ -152,4 +161,18 @@ func loadWorkerCount() (int, error) {
 	}
 
 	return workerCount, nil
+}
+
+func loadCheckInterval() (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv("APP_SCRAPPER_CHECK_INTERVAL"))
+	if raw == "" {
+		return defaultCheckInterval, nil
+	}
+
+	interval, err := time.ParseDuration(raw)
+	if err != nil || interval <= 0 {
+		return 0, ErrCheckIntervalInvalid
+	}
+
+	return interval, nil
 }
