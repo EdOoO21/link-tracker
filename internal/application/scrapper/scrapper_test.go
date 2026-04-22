@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	scrapperinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/interfaces"
 	models "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/models"
 	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/domain"
 	ports "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
@@ -198,6 +199,19 @@ func (s *stubGithub) GetRepoUpdate(_ context.Context, owner, repo string, since 
 	return s.update, s.updateErr
 }
 
+func (s *stubGithub) CanHandle(_ string) bool {
+	return s.parseErr == nil
+}
+
+func (s *stubGithub) CheckUpdate(ctx context.Context, raw string, since time.Time) (ports.ResourceUpdate, error) {
+	owner, repo, err := s.ParseGitHubURL(raw)
+	if err != nil {
+		return ports.ResourceUpdate{}, err
+	}
+
+	return s.GetRepoUpdate(ctx, owner, repo, since)
+}
+
 func (s *stubGithub) ParseGitHubURL(_ string) (owner, repo string, err error) {
 	if s.parseErr != nil {
 		return "", "", s.parseErr
@@ -220,6 +234,19 @@ func (s *stubStackOverflow) GetQuestionUpdate(_ context.Context, questionID stri
 	return s.update, s.updateErr
 }
 
+func (s *stubStackOverflow) CanHandle(_ string) bool {
+	return s.parseErr == nil
+}
+
+func (s *stubStackOverflow) CheckUpdate(ctx context.Context, raw string, since time.Time) (ports.ResourceUpdate, error) {
+	questionID, err := s.ParseStackOverflowURL(raw)
+	if err != nil {
+		return ports.ResourceUpdate{}, err
+	}
+
+	return s.GetQuestionUpdate(ctx, questionID, since)
+}
+
 func (s *stubStackOverflow) ParseStackOverflowURL(_ string) (string, error) {
 	if s.parseErr != nil {
 		return "", s.parseErr
@@ -231,7 +258,7 @@ func TestScrapperCRUD(t *testing.T) {
 	repo := &stubRepo{
 		listResp: []domain.Link{{URL: "https://github.com/user/repo"}},
 	}
-	svc := NewScrapper(noopLogger{}, repo, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{}, 100, 4)
+	svc := NewScrapper(noopLogger{}, repo, &stubBotClient{}, []scrapperinterfaces.Checker{&stubGithub{}, &stubStackOverflow{}}, 100, 4)
 	ctx := context.Background()
 	if err := svc.AddLink(ctx, models.AddLink{ChatID: 1, URL: "https://github.com/user/repo", Tags: []string{"go"}}); err != nil {
 		t.Fatalf("unexpected add link error: %v", err)
@@ -291,7 +318,7 @@ func TestScrapperErrors(t *testing.T) {
 		getTagsErr: ports.ErrChatNotFound,
 		delTagErr:  ports.ErrChatNotFound,
 		listErr:    ports.ErrChatNotFound,
-	}, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{}, 100, 4)
+	}, &stubBotClient{}, []scrapperinterfaces.Checker{&stubGithub{}, &stubStackOverflow{}}, 100, 4)
 	ctx := context.Background()
 	if err := service.AddLink(ctx, models.AddLink{ChatID: 1}); !errors.Is(err, ports.ErrChatNotFound) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrChatNotFound)
@@ -321,7 +348,7 @@ func TestScrapperErrors(t *testing.T) {
 		addChatErr: ports.ErrChatAlreadyExists,
 		deleteErr:  ports.ErrChatNotFound,
 	}
-	service = NewScrapper(noopLogger{}, repo, &stubBotClient{}, &stubGithub{}, &stubStackOverflow{}, 100, 4)
+	service = NewScrapper(noopLogger{}, repo, &stubBotClient{}, []scrapperinterfaces.Checker{&stubGithub{}, &stubStackOverflow{}}, 100, 4)
 	if err := service.AddLink(ctx, models.AddLink{ChatID: 1}); !errors.Is(err, ports.ErrLinkAlreadyExists) {
 		t.Fatalf("got err %v, want %v", err, ports.ErrLinkAlreadyExists)
 	}
@@ -359,7 +386,7 @@ func TestGetResourceUpdate(t *testing.T) {
 	}
 	ctx := context.Background()
 	for _, tt := range tests {
-		svc := NewScrapper(noopLogger{}, &stubRepo{}, &stubBotClient{}, tt.github, tt.stackoverflow, 100, 4)
+		svc := NewScrapper(noopLogger{}, &stubRepo{}, &stubBotClient{}, []scrapperinterfaces.Checker{tt.github, tt.stackoverflow}, 100, 4)
 		update, err := svc.getResourceUpdate(ctx, models.TrackedLink{
 			URL:        "https://example.com",
 			LastUpdate: updatedAt.Add(-time.Minute),
@@ -407,7 +434,7 @@ func TestCheckLinks(t *testing.T) {
 		},
 	}
 	stack := &stubStackOverflow{parseErr: errors.New("nope")}
-	svc := NewScrapper(noopLogger{}, repo, botClient, github, stack, 100, 4)
+	svc := NewScrapper(noopLogger{}, repo, botClient, []scrapperinterfaces.Checker{github, stack}, 100, 4)
 
 	svc.CheckLinks(context.Background())
 
@@ -445,7 +472,7 @@ func TestCheckLinksSkipsWhenNothingChanged(t *testing.T) {
 			Message:    "",
 		},
 	}
-	svc := NewScrapper(noopLogger{}, repo, botClient, github, &stubStackOverflow{parseErr: errors.New("nope")}, 100, 4)
+	svc := NewScrapper(noopLogger{}, repo, botClient, []scrapperinterfaces.Checker{github, &stubStackOverflow{parseErr: errors.New("nope")}}, 100, 4)
 
 	svc.CheckLinks(context.Background())
 
@@ -474,7 +501,7 @@ func TestCheckLinksSendsFailedLinksReport(t *testing.T) {
 	stack := &stubStackOverflow{
 		parseErr: errors.New("nope"),
 	}
-	svc := NewScrapper(noopLogger{}, repo, botClient, github, stack, 100, 4)
+	svc := NewScrapper(noopLogger{}, repo, botClient, []scrapperinterfaces.Checker{github, stack}, 100, 4)
 
 	svc.CheckLinks(context.Background())
 

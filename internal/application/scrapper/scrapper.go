@@ -12,15 +12,10 @@ import (
 	ports "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/ports"
 )
 
-type Sources struct {
-	Github        scrapperinterfaces.GithubUpdates
-	StackOverflow scrapperinterfaces.StackOverflowUpdates
-}
-
 type Scrapper struct {
 	repo      scrapperinterfaces.Repository
 	logger    ports.Logger
-	sources   Sources
+	checkers  []scrapperinterfaces.Checker
 	botClient scrapperinterfaces.BotClient
 	batchSize int
 	workers   int
@@ -29,8 +24,7 @@ type Scrapper struct {
 func NewScrapper(logger ports.Logger,
 	repo scrapperinterfaces.Repository,
 	botClient scrapperinterfaces.BotClient,
-	github scrapperinterfaces.GithubUpdates,
-	stackOverflow scrapperinterfaces.StackOverflowUpdates,
+	checkers []scrapperinterfaces.Checker,
 	batchSize int,
 	workers int) *Scrapper {
 	if batchSize <= 0 {
@@ -46,10 +40,7 @@ func NewScrapper(logger ports.Logger,
 		botClient: botClient,
 		batchSize: batchSize,
 		workers:   workers,
-		sources: Sources{
-			Github:        github,
-			StackOverflow: stackOverflow,
-		},
+		checkers:  append([]scrapperinterfaces.Checker(nil), checkers...),
 	}
 }
 
@@ -199,23 +190,17 @@ func (s *Scrapper) sendFailedLinksReports(ctx context.Context, failedLinksByChat
 }
 
 func (s *Scrapper) getResourceUpdate(ctx context.Context, link models.TrackedLink) (ports.ResourceUpdate, error) {
-	if owner, repo, parseErr := s.sources.Github.ParseGitHubURL(link.URL); parseErr == nil {
-		s.logger.Info("resolved link source", "url", link.URL, "source", "github", "owner", owner, "repo", repo, "since", link.LastUpdate)
-		update, updateErr := s.sources.Github.GetRepoUpdate(ctx, owner, repo, link.LastUpdate)
-		if updateErr != nil {
-			return ports.ResourceUpdate{}, fmt.Errorf("get github update: %w", updateErr)
+	for _, checker := range s.checkers {
+		if !checker.CanHandle(link.URL) {
+			continue
 		}
-		s.logger.Info("fetched github resource update", "url", link.URL, "lastUpdate", update.LastUpdate)
-		return update, nil
-	}
 
-	if questionID, parseErr := s.sources.StackOverflow.ParseStackOverflowURL(link.URL); parseErr == nil {
-		s.logger.Info("resolved link source", "url", link.URL, "source", "stackoverflow", "questionID", questionID, "since", link.LastUpdate)
-		update, updateErr := s.sources.StackOverflow.GetQuestionUpdate(ctx, questionID, link.LastUpdate)
+		s.logger.Info("resolved link source", "url", link.URL, "since", link.LastUpdate)
+		update, updateErr := checker.CheckUpdate(ctx, link.URL, link.LastUpdate)
 		if updateErr != nil {
-			return ports.ResourceUpdate{}, fmt.Errorf("get stackoverflow update: %w", updateErr)
+			return ports.ResourceUpdate{}, fmt.Errorf("check resource update: %w", updateErr)
 		}
-		s.logger.Info("fetched stackoverflow resource update", "url", link.URL, "lastUpdate", update.LastUpdate)
+		s.logger.Info("fetched resource update", "url", link.URL, "lastUpdate", update.LastUpdate)
 		return update, nil
 	}
 

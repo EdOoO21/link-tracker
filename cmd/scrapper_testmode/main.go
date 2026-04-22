@@ -49,9 +49,8 @@ func run(ctx context.Context, logger *logs.Logger) error {
 	}
 	defer repository.Close()
 
-	githubUpdates := sourcedummy.NewGitHubClient()
-	stackOverflowUpdates := sourcedummy.NewStackOverflowClient()
-	logger.Info("scrapper dummy source clients initialized")
+	checkers := sourcedummy.NewCheckers()
+	logger.Info("scrapper dummy source clients initialized", "count", len(checkers))
 	botClient, botConn, err := newBotGRPCClient(logger, cfg.BotURL.HostPort())
 	if err != nil {
 		return fmt.Errorf("create bot grpc client: %w", err)
@@ -63,7 +62,7 @@ func run(ctx context.Context, logger *logs.Logger) error {
 		}
 	}()
 
-	scrapperService := scrapper.NewScrapper(logger, repository, botClient, githubUpdates, stackOverflowUpdates, cfg.BatchSize, cfg.WorkerCount)
+	scrapperService := scrapper.NewScrapper(logger, repository, botClient, checkers, cfg.BatchSize, cfg.WorkerCount)
 	scrapperService.RunCron(ctx, cfg.CheckInterval)
 	logger.Info("scrapper cron started", "interval", cfg.CheckInterval)
 

@@ -65,6 +65,20 @@ func (c *Client) GetRepoUpdate(ctx context.Context, owner, repo string, since ti
 	return data.toResourceUpdate(since), nil
 }
 
+func (c *Client) CanHandle(raw string) bool {
+	_, _, err := c.ParseGitHubURL(raw)
+	return err == nil
+}
+
+func (c *Client) CheckUpdate(ctx context.Context, raw string, since time.Time) (ports.ResourceUpdate, error) {
+	owner, repo, err := c.ParseGitHubURL(raw)
+	if err != nil {
+		return ports.ResourceUpdate{}, fmt.Errorf("parse github url: %w", err)
+	}
+
+	return c.GetRepoUpdate(ctx, owner, repo, since)
+}
+
 func (c *Client) ParseGitHubURL(raw string) (owner, repo string, err error) {
 	u, err := url.Parse(raw)
 	if err != nil {

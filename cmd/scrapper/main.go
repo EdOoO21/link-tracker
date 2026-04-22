@@ -11,9 +11,8 @@ import (
 
 	scrapper "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper"
 	scrapperinterfaces "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/application/scrapper/interfaces"
+	sourceclients "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients"
 	botgrpc "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/bot_grpc"
-	github "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/github"
-	"gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/clients/stackoverflow"
 	grpcscrapper "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/grpc/scrapper"
 	logs "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/logger"
 	postgresrepo "gitlab.education.tbank.ru/backend-academy-go-2025/homeworks/link-tracker/internal/infrastructure/postgres"
@@ -49,9 +48,8 @@ func run(ctx context.Context, logger *logs.Logger) error {
 	}
 	defer repository.Close()
 
-	githubClient := github.NewGitHubClient()
-	stackOverflowClient := stackoverflow.NewStackOverflowClient()
-	logger.Info("scrapper source clients initialized")
+	checkers := sourceclients.NewCheckers()
+	logger.Info("scrapper source clients initialized", "count", len(checkers))
 	botClient, botConn, err := newBotGRPCClient(logger, cfg.BotURL.HostPort())
 	if err != nil {
 		return fmt.Errorf("create bot grpc client: %w", err)
@@ -63,7 +61,7 @@ func run(ctx context.Context, logger *logs.Logger) error {
 		}
 	}()
 
-	scrapperService := scrapper.NewScrapper(logger, repository, botClient, githubClient, stackOverflowClient, cfg.BatchSize, cfg.WorkerCount)
+	scrapperService := scrapper.NewScrapper(logger, repository, botClient, checkers, cfg.BatchSize, cfg.WorkerCount)
 	scrapperService.RunCron(ctx, cfg.CheckInterval)
 	logger.Info("scrapper cron started", "interval", cfg.CheckInterval)
 

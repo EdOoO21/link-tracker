@@ -54,6 +54,20 @@ func (c *Client) GetQuestionUpdate(ctx context.Context, questionID string, since
 	}.toResourceUpdate(since), nil
 }
 
+func (c *Client) CanHandle(raw string) bool {
+	_, err := c.ParseStackOverflowURL(raw)
+	return err == nil
+}
+
+func (c *Client) CheckUpdate(ctx context.Context, raw string, since time.Time) (ports.ResourceUpdate, error) {
+	questionID, err := c.ParseStackOverflowURL(raw)
+	if err != nil {
+		return ports.ResourceUpdate{}, fmt.Errorf("parse stackoverflow url: %w", err)
+	}
+
+	return c.GetQuestionUpdate(ctx, questionID, since)
+}
+
 func (c *Client) ParseStackOverflowURL(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
